@@ -200,24 +200,25 @@ const MIGRATIONS = [
 ];
 
 let ready = null;
-/** Apply pending migrations once per process (advisory-locked so concurrent cold starts are safe). */
+/** Apply pending migrations once per process. Runs in a single transaction guarded by a
+ *  transaction-scoped advisory lock, so it is safe behind PgBouncer/Neon pooling and
+ *  concurrent cold starts (DDL is transactional in Postgres). */
 export function ensureSchema() {
   if (!ready) {
     ready = (async () => {
       const c = await getPool().connect();
       try {
-        await c.query('SELECT pg_advisory_lock(7262001)');
+        await c.query('BEGIN');
+        await c.query('SELECT pg_advisory_xact_lock(7262001)');
         await c.query('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
         const v = Number((await c.query("SELECT value FROM meta WHERE key='schema_version'")).rows[0]?.value || 0);
         for (let i = v; i < MIGRATIONS.length; i++) {
-          await c.query('BEGIN');
           await c.query(MIGRATIONS[i]);
           await c.query("INSERT INTO meta (key, value) VALUES ('schema_version', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [String(i + 1)]);
-          await c.query('COMMIT');
           console.log(`migrated schema to v${i + 1}`);
         }
+        await c.query('COMMIT');
       } catch (e) { await c.query('ROLLBACK').catch(() => {}); ready = null; throw e; } finally {
-        await c.query('SELECT pg_advisory_unlock(7262001)').catch(() => {});
         c.release();
       }
     })();
