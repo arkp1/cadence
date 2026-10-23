@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
-import { api, absUrl } from '../lib.js';
+import { api, absUrl, ts } from '../lib.js';
 import { Button, Field, Spinner, useAsync, useToast, Empty, Badge, CopyButton, Toggle, Confirm, Tabs } from '../components/ui.jsx';
 
 const QT = { name: 'Name', email: 'Email', text: 'Short text', textarea: 'Long text', select: 'Dropdown', radio: 'Radio', phone: 'Phone', number: 'Number' };
@@ -125,7 +125,7 @@ function FormEditor({ id, ets, onBack }) {
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Submitted</th>{f.questions.map((q) => <th key={q.id}>{q.label}</th>)}<th>Routed to</th><th>Booked</th></tr></thead>
               <tbody>{subs.map((s) => (
-                <tr key={s.id}><td className="small">{DateTime.fromSQL(s.created_at, { zone: 'utc' }).toLocal().toFormat('LLL d, h:mma')}</td>
+                <tr key={s.id}><td className="small">{ts(s.created_at).toLocal().toFormat('LLL d, h:mma')}</td>
                   {f.questions.map((q) => <td key={q.id}>{String(s.answers.find((a) => a.id === q.id)?.value ?? '')}</td>)}
                   <td className="small">{s.result.type === 'event_type' ? `📅 ${ets.find((e) => e.id === s.result.event_type_id)?.name || 'Event'}` : s.result.type === 'url' ? `🔗 ${s.result.url}` : '💬 Message'}{s.result.matched_rule ? '' : ' (fallback)'}</td>
                   <td>{s.booking_uid ? <Badge color="green">Yes</Badge> : <Badge>No</Badge>}</td></tr>

@@ -6,3 +6,5 @@ data/
 .env
 .DS_Store
 npm-debug.log*
+.vercel/
+.cadence-src/

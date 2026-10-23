@@ -18,7 +18,7 @@ export function ProfilePage() {
   return (
     <PublicShell owner={profile} wide>
       <div className="profile-head">
-        <Avatar name={profile.name} color={profile.avatar_color} size={64} />
+        <Avatar name={profile.name} color={profile.avatar_color} src={profile.avatar_url} size={64} />
         <h1>{profile.name}</h1>
         {profile.welcome && <p className="muted">{profile.welcome}</p>}
       </div>
@@ -104,23 +104,65 @@ function DetailCard({ booking, tz, strike }) {
         <li>🌐 {tz.replace(/_/g, ' ')}</li>
         {booking.location?.type && <li>{LOCATION_TYPES[booking.location.type]?.icon} {locationLabel(booking.location)}{booking.location.value ? <>: {/^https?:/.test(booking.location.value) ? <a className="link" href={booking.location.value} target="_blank" rel="noreferrer">{booking.location.value}</a> : booking.location.value}</> : ''}</li>}
         {booking.guests?.length > 0 && <li>✉️ Guests: {booking.guests.join(', ')}</li>}
-        {booking.payment_status && <li>💳 {fmtMoney(booking.price_cents, booking.currency)} — {booking.payment_status === 'paid_demo' ? 'paid (demo)' : booking.payment_status}</li>}
+        {booking.payment_status && booking.price_cents > 0 && <li>💳 {fmtMoney(booking.price_cents, booking.currency)} · {booking.payment_status === 'paid' ? 'Paid' : booking.payment_status === 'refunded' ? 'Refunded' : 'Awaiting payment'}</li>}
       </ul>
     </div>
+  );
+}
+
+function PaymentPending({ booking, canceled }) {
+  const eventUrl = booking.event_type && booking.owner ? `/${booking.owner.slug}/${booking.event_type.slug}` : `/${booking.owner?.slug || ''}`;
+  const tz = booking.invitee_tz || browserTz();
+  if (booking.status === 'expired' || canceled) {
+    return (
+      <PublicShell owner={booking.owner}>
+        <div className="confirm">
+          <div className="confirm-icon gray">!</div>
+          <h1>{canceled ? 'Payment not completed' : 'Reservation expired'}</h1>
+          <p className="muted">{canceled ? 'You left checkout before paying, so this time is not booked.' : 'Payment wasn\'t completed in time, so the held slot was released.'} You haven't been charged.</p>
+          <DetailCard booking={booking} tz={tz} strike />
+          <Link className="btn btn-primary btn-pill" to={eventUrl}>Pick a time again</Link>
+        </div>
+      </PublicShell>
+    );
+  }
+  return (
+    <PublicShell owner={booking.owner}>
+      <div className="confirm">
+        <Spinner />
+        <h1>Confirming your payment…</h1>
+        <p className="muted">This usually takes a few seconds. Please keep this page open.</p>
+        <DetailCard booking={booking} tz={tz} />
+      </div>
+    </PublicShell>
   );
 }
 
 export function BookingPage({ cancelMode }) {
   const { uid } = useParams();
   const nav = useNavigate();
-  const isNew = new URLSearchParams(window.location.search).get('new') === '1';
-  const { data, loading, error, setData } = useAsync(() => api(`/api/public/bookings/${uid}`), [uid]);
+  const qs = new URLSearchParams(window.location.search);
+  const sessionId = qs.get('session_id');
+  const paymentCanceled = qs.get('payment') === 'canceled';
+  const isNew = qs.get('new') === '1' || !!sessionId;
+  const { data, loading, error, setData } = useAsync(() => api(`/api/public/bookings/${uid}${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`), [uid]);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const pending = data?.booking?.status === 'pending_payment' && !paymentCanceled;
+  useEffect(() => {
+    if (!pending) return undefined;
+    let n = 0;
+    const t = setInterval(async () => {
+      n += 1;
+      try { const r = await api(`/api/public/bookings/${uid}${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`); if (r.booking.status !== 'pending_payment' || n > 40) { setData(r); clearInterval(t); } } catch { /* keep polling */ }
+    }, 2500);
+    return () => clearInterval(t);
+  }, [pending, uid, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (loading) return <PublicShell><Spinner center /></PublicShell>;
   if (error) return <NotFound title="Booking not found" />;
   const b = data.booking;
+  if (b.status === 'pending_payment' || b.status === 'expired') return <PaymentPending booking={b} canceled={paymentCanceled} />;
   if (b.status !== 'active') return <BookingStatus booking={b} />;
   const tz = b.invitee_tz || browserTz();
   const title = `${b.event_type?.name || 'Meeting'} with ${b.hosts.map((h) => h.name).join(', ')}`;
@@ -188,7 +230,7 @@ export function PollPage() {
     <PublicShell owner={p.owner} wide>
       <div className="poll">
         <div className="poll-head">
-          <Avatar name={p.owner.name} color={p.owner.avatar_color} size={44} />
+          <Avatar name={p.owner.name} color={p.owner.avatar_color} src={p.owner.avatar_url} size={44} />
           <div><div className="muted small">{p.owner.name} · Meeting poll</div><h1>{p.title}</h1><div className="muted small">⏱ {durLabel(p.duration)}{p.location?.type ? ` · ${locationLabel(p.location)}` : ''}</div></div>
         </div>
         {p.description && <p>{p.description}</p>}
@@ -254,7 +296,7 @@ export function RoutingFormPage() {
           else setResult(res);
         } catch (ex) { setErr(ex.message); setBusy(false); }
       }}>
-        <Avatar name={f.owner.name} color={f.owner.avatar_color} size={48} />
+        <Avatar name={f.owner.name} color={f.owner.avatar_color} src={f.owner.avatar_url} size={48} />
         <h1>{f.name}</h1>
         {f.description && <p className="muted">{f.description}</p>}
         {f.questions.map((q) => (

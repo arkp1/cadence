@@ -35,7 +35,9 @@ export function Toggle({ checked, onChange, label, disabled }) {
     </label>
   );
 }
-export function Avatar({ name, color = '#4f46e5', size = 40 }) {
+export function Avatar({ name, color = '#4f46e5', size = 40, src }) {
+  const [broken, setBroken] = useState(false);
+  if (src && !broken) return <img className="avatar-img" src={src} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setBroken(true)} />;
   return <div className="avatar" style={{ background: color, width: size, height: size, fontSize: size * 0.38 }}>{initials(name)}</div>;
 }
 export function Modal({ open, onClose, title, children, footer, width = 560 }) {

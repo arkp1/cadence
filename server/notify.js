@@ -2,17 +2,19 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { DateTime } from 'luxon';
 import { db, J, S, mapBooking, mapEventType } from './db.js';
+import { config, BASE_URL } from './config.js';
+import { background } from './background.js';
+import { assertPublicUrl } from './security.js';
 
-export const BASE_URL = () => (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+export { BASE_URL };
 let mailer = null;
-if (process.env.SMTP_HOST) {
-  mailer = nodemailer.createTransport({
-    host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-  });
+if (config.email.smtp) {
+  const m = config.email.smtp;
+  mailer = nodemailer.createTransport({ host: m.host, port: m.port, secure: m.secure, auth: m.user ? { user: m.user, pass: m.pass } : undefined });
 }
-export const smtpEnabled = () => !!mailer;
+export const emailEnabled = () => !!(config.email.resendKey || mailer);
+const FROM = () => config.email.from || 'Cadence <onboarding@resend.dev>';
+const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ---------------- ICS ----------------
 const icsDate = (iso) => DateTime.fromISO(iso, { zone: 'utc' }).toFormat("yyyyMMdd'T'HHmmss'Z'");
@@ -23,33 +25,35 @@ export function locationText(loc) {
   const label = map[loc.type] ?? loc.type;
   if (loc.type === 'phone_outbound') return `Phone call — host will call ${loc.value || 'you'}`;
   if (loc.type === 'phone_inbound') return `Phone call — dial ${loc.value || ''}`;
+  if (['google_meet', 'teams', 'zoom'].includes(loc.type) && !loc.value) return `${label} (link will be shared by the host)`;
   return [label, loc.value].filter(Boolean).join(': ');
 }
-export function bookingICS(bookings, { method = 'PUBLISH', calName } = {}) {
+export async function bookingICS(bookings, { method = 'PUBLISH', calName } = {}) {
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Cadence//Scheduling//EN', 'CALSCALE:GREGORIAN', `METHOD:${method}`];
   if (calName) lines.push(`X-WR-CALNAME:${esc(calName)}`);
   for (const b of bookings) {
-    const host = db.prepare('SELECT name, email FROM users WHERE id=?').get(b.host_ids?.[0] || b.owner_id) || {};
-    const et = b.event_type_id ? db.prepare('SELECT name FROM event_types WHERE id=?').get(b.event_type_id) : (b.poll_id ? { name: db.prepare('SELECT title FROM polls WHERE id=?').get(b.poll_id)?.title } : null);
-    lines.push('BEGIN:VEVENT', `UID:${b.uid}@cadence`, `DTSTAMP:${icsDate(new Date().toISOString())}`,
+    const host = await db.prepare('SELECT name, email FROM users WHERE id=?').get(b.host_ids?.[0] || b.owner_id) || {};
+    const et = b.event_type_id ? await db.prepare('SELECT name FROM event_types WHERE id=?').get(b.event_type_id) : (b.poll_id ? { name: (await db.prepare('SELECT title FROM polls WHERE id=?').get(b.poll_id))?.title } : null);
+    const canceled = b.status !== 'active' && b.status !== 'pending_payment';
+    lines.push('BEGIN:VEVENT', `UID:${b.uid}@cadence`, `DTSTAMP:${icsDate(new Date().toISOString())}`, `SEQUENCE:${canceled ? 1 : 0}`,
       `DTSTART:${icsDate(b.start_utc)}`, `DTEND:${icsDate(b.end_utc)}`,
       `SUMMARY:${esc(`${et?.name || 'Meeting'}: ${b.invitee_name} & ${host.name || ''}`)}`,
-      `DESCRIPTION:${esc(`Booked with Cadence.\nLocation: ${locationText(b.location)}\nReschedule: ${BASE_URL()}/reschedule/${b.uid}\nCancel: ${BASE_URL()}/cancel/${b.uid}`)}`,
+      `DESCRIPTION:${esc(`Location: ${locationText(b.location)}\nReschedule: ${BASE_URL()}/reschedule/${b.uid}\nCancel: ${BASE_URL()}/cancel/${b.uid}`)}`,
       `LOCATION:${esc(locationText(b.location))}`,
-      `ORGANIZER;CN=${esc(host.name)}:mailto:${host.email || 'noreply@cadence.local'}`,
+      `ORGANIZER;CN=${esc(host.name)}:mailto:${host.email || 'noreply@example.com'}`,
       `ATTENDEE;CN=${esc(b.invitee_name)};RSVP=TRUE:mailto:${b.invitee_email}`,
-      `STATUS:${b.status === 'active' ? 'CONFIRMED' : 'CANCELLED'}`, 'END:VEVENT');
+      `STATUS:${canceled ? 'CANCELLED' : 'CONFIRMED'}`, 'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
   return lines.join('\r\n');
 }
 
 // ---------------- templating ----------------
-export function bookingContext(b) {
-  const poll = b.poll_id ? db.prepare('SELECT title FROM polls WHERE id=?').get(b.poll_id) : null;
-  const et = mapEventType(db.prepare('SELECT * FROM event_types WHERE id=?').get(b.event_type_id)) || { name: poll?.title || 'Meeting' };
-  const host = db.prepare('SELECT * FROM users WHERE id=?').get(b.host_ids?.[0] || b.owner_id) || {};
-  const owner = db.prepare('SELECT * FROM users WHERE id=?').get(b.owner_id) || host;
+export async function bookingContext(b) {
+  const poll = b.poll_id ? await db.prepare('SELECT title FROM polls WHERE id=?').get(b.poll_id) : null;
+  const et = (b.event_type_id && mapEventType(await db.prepare('SELECT * FROM event_types WHERE id=?').get(b.event_type_id))) || { name: poll?.title || 'Meeting' };
+  const host = await db.prepare('SELECT * FROM users WHERE id=?').get(b.host_ids?.[0] || b.owner_id) || {};
+  const owner = await db.prepare('SELECT * FROM users WHERE id=?').get(b.owner_id) || host;
   const itz = b.invitee_tz || 'UTC';
   const fmt = (zone) => DateTime.fromISO(b.start_utc, { zone: 'utc' }).setZone(zone).toFormat("h:mma – cccc, LLLL d, yyyy").replace('AM', 'am').replace('PM', 'pm');
   return {
@@ -65,37 +69,46 @@ export function bookingContext(b) {
 export const render = (tpl, ctx) => String(tpl || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => ctx[k] ?? '');
 
 function wrapHtml(title, bodyText, brand = '#4f46e5', b) {
-  const body = String(bodyText).split('\n').map((l) => l.trim() ? `<p style="margin:0 0 10px">${l.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:' + brand + '">$1</a>')}</p>` : '<br/>').join('');
+  const body = String(bodyText).split('\n').map((l) => l.trim() ? `<p style="margin:0 0 10px">${escHtml(l).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:' + brand + '">$1</a>')}</p>` : '<br/>').join('');
   return `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-  <div style="background:${brand};color:#fff;padding:18px 24px;font-size:18px;font-weight:600">${title}</div>
+  <div style="background:${brand};color:#fff;padding:18px 24px;font-size:18px;font-weight:600">${escHtml(title)}</div>
   <div style="padding:22px 24px;color:#111827;font-size:14px;line-height:1.55">${body}</div>
   ${b ? `<div style="padding:0 24px 22px"><a href="${BASE_URL()}/reschedule/${b.uid}" style="color:${brand};margin-right:16px">Reschedule</a><a href="${BASE_URL()}/cancel/${b.uid}" style="color:${brand}">Cancel</a></div>` : ''}
   <div style="padding:12px 24px;background:#f9fafb;color:#6b7280;font-size:12px">Sent by Cadence scheduling</div></div>`;
 }
 
-export async function sendEmail({ userId, to, subject, html, kind, bookingUid, ics }) {
-  const info = db.prepare('INSERT INTO outbox (user_id, to_email, subject, html, kind, booking_uid) VALUES (?,?,?,?,?,?)')
-    .run(userId ?? null, to, subject, html, kind, bookingUid ?? null);
-  if (!mailer) return;
+export async function sendEmail({ userId, to, subject, html, kind, bookingUid, ics, icsMethod = 'REQUEST' }) {
+  const info = await db.prepare('INSERT INTO outbox (user_id, to_email, subject, html, kind, booking_uid, error) VALUES (?,?,?,?,?,?,?)')
+    .run(userId ?? null, to, subject, html, kind, bookingUid ?? null, emailEnabled() ? null : 'Email delivery is not configured');
+  if (!emailEnabled()) return;
   try {
-    await mailer.sendMail({
-      from: process.env.SMTP_FROM || 'Cadence <no-reply@cadence.local>', to, subject, html,
-      icalEvent: ics ? { method: 'REQUEST', content: ics } : undefined,
-    });
-    db.prepare('UPDATE outbox SET delivered=1 WHERE id=?').run(info.lastInsertRowid);
+    if (config.email.resendKey) {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST', headers: { Authorization: `Bearer ${config.email.resendKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: FROM(), to: [to], subject, html,
+          attachments: ics ? [{ filename: 'invite.ics', content: Buffer.from(ics).toString('base64'), content_type: `text/calendar; method=${icsMethod}` }] : undefined }),
+      });
+      if (!r.ok) throw new Error(`Resend ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    } else {
+      await mailer.sendMail({ from: FROM(), to, subject, html, icalEvent: ics ? { method: icsMethod, content: ics } : undefined });
+    }
+    await db.prepare('UPDATE outbox SET delivered=1 WHERE id=?').run(info.lastInsertRowid);
   } catch (e) {
-    db.prepare('UPDATE outbox SET error=? WHERE id=?').run(String(e.message).slice(0, 300), info.lastInsertRowid);
+    console.error('email failed', e.message);
+    await db.prepare('UPDATE outbox SET error=? WHERE id=?').run(String(e.message).slice(0, 300), info.lastInsertRowid);
   }
 }
 
 // ---------------- built-in notifications ----------------
-export function notifyBooking(b, kind, extra = {}) {
-  b = typeof b === 'string' ? mapBooking(db.prepare('SELECT * FROM bookings WHERE uid=?').get(b)) : b;
-  const ctx = bookingContext(b);
-  const owner = db.prepare('SELECT * FROM users WHERE id=?').get(b.owner_id);
+export async function notifyBooking(b, kind, extra = {}) {
+  b = typeof b === 'string' ? mapBooking(await db.prepare('SELECT * FROM bookings WHERE uid=?').get(b)) : b;
+  const ctx = await bookingContext(b);
+  const owner = await db.prepare('SELECT * FROM users WHERE id=?').get(b.owner_id);
   const brand = owner?.brand_color || '#4f46e5';
-  const hosts = (b.host_ids.length ? b.host_ids : [b.owner_id]).map((id) => db.prepare('SELECT * FROM users WHERE id=?').get(id)).filter(Boolean);
-  const ics = kind === 'canceled' ? null : bookingICS([b], { method: 'REQUEST' });
+  const hosts = (await Promise.all((b.host_ids.length ? b.host_ids : [b.owner_id]).map((id) => db.prepare('SELECT * FROM users WHERE id=?').get(id)))).filter(Boolean);
+  const icsMethod = kind === 'canceled' ? 'CANCEL' : 'REQUEST';
+  const ics = await bookingICS([b], { method: icsMethod });
+  const synced = new Set((b.external_events || []).map((x) => x.user_id)); // hosts whose calendar already has the event
   const answers = ctx.answers ? `\nAnswers:\n${ctx.answers}` : '';
   const T = {
     created: {
@@ -113,17 +126,18 @@ export function notifyBooking(b, kind, extra = {}) {
   }[kind];
   if (!T) return;
   const withLinks = kind !== 'canceled' ? b : null;
-  sendEmail({ userId: b.owner_id, to: b.invitee_email, subject: T.inv[0], html: wrapHtml(T.inv[0], T.inv[1], brand, withLinks), kind: `invitee_${kind}`, bookingUid: b.uid, ics });
-  for (const g of b.guests || []) sendEmail({ userId: b.owner_id, to: g, subject: T.inv[0], html: wrapHtml(T.inv[0], T.inv[1], brand), kind: `guest_${kind}`, bookingUid: b.uid, ics });
-  for (const h of hosts) sendEmail({ userId: b.owner_id, to: h.email, subject: T.host[0], html: wrapHtml(T.host[0], T.host[1], brand), kind: `host_${kind}`, bookingUid: b.uid, ics });
+  const jobs = [sendEmail({ userId: b.owner_id, to: b.invitee_email, subject: T.inv[0], html: wrapHtml(T.inv[0], T.inv[1], brand, withLinks), kind: `invitee_${kind}`, bookingUid: b.uid, ics, icsMethod })];
+  for (const g of b.guests || []) jobs.push(sendEmail({ userId: b.owner_id, to: g, subject: T.inv[0], html: wrapHtml(T.inv[0], T.inv[1], brand), kind: `guest_${kind}`, bookingUid: b.uid, ics, icsMethod }));
+  for (const h of hosts) jobs.push(sendEmail({ userId: b.owner_id, to: h.email, subject: T.host[0], html: wrapHtml(T.host[0], T.host[1], brand), kind: `host_${kind}`, bookingUid: b.uid, ics: synced.has(h.id) ? null : ics, icsMethod }));
+  await Promise.allSettled(jobs);
 }
 
 // ---------------- workflows ----------------
-function workflowsFor(b, triggers) {
+async function workflowsFor(b, triggers) {
   const userIds = [...new Set([b.owner_id, ...(b.host_ids || [])])];
   const out = [];
   for (const uidv of userIds) {
-    for (const w of db.prepare('SELECT * FROM workflows WHERE user_id=? AND active=1').all(uidv)) {
+    for (const w of await db.prepare('SELECT * FROM workflows WHERE user_id=? AND active=1').all(uidv)) {
       const ids = J(w.event_type_ids, []);
       if (!triggers.includes(w.trigger)) continue;
       if (ids.length && !ids.includes(b.event_type_id)) continue;
@@ -132,42 +146,50 @@ function workflowsFor(b, triggers) {
   }
   return out;
 }
-export function scheduleWorkflows(b) {
-  db.prepare("DELETE FROM jobs WHERE booking_id=? AND status='pending'").run(b.id);
-  for (const w of workflowsFor(b, ['before_start', 'after_end', 'booked'])) {
+export async function scheduleWorkflows(b) {
+  await db.prepare("DELETE FROM jobs WHERE booking_id=? AND status='pending'").run(b.id);
+  for (const w of await workflowsFor(b, ['before_start', 'after_end', 'booked'])) {
     let at;
     if (w.trigger === 'booked') at = DateTime.utc().plus({ seconds: 2 });
     if (w.trigger === 'before_start') at = DateTime.fromISO(b.start_utc).minus({ minutes: w.offset_minutes });
     if (w.trigger === 'after_end') at = DateTime.fromISO(b.end_utc).plus({ minutes: w.offset_minutes });
     if (w.trigger !== 'booked' && at < DateTime.utc()) continue;
-    db.prepare('INSERT INTO jobs (run_at, workflow_id, booking_id) VALUES (?,?,?)').run(at.toUTC().toISO(), w.id, b.id);
+    await db.prepare('INSERT INTO jobs (run_at, workflow_id, booking_id) VALUES (?,?,?)').run(at.toUTC().toISO(), w.id, b.id);
   }
 }
-export function cancelWorkflows(b) {
-  db.prepare("UPDATE jobs SET status='canceled' WHERE booking_id=? AND status='pending'").run(b.id);
-  for (const w of workflowsFor(b, ['canceled'])) runWorkflow(w, b);
+export async function cancelWorkflows(b) {
+  await db.prepare("UPDATE jobs SET status='canceled' WHERE booking_id=? AND status='pending'").run(b.id);
+  for (const w of await workflowsFor(b, ['canceled'])) await runWorkflow(w, b);
 }
-function runWorkflow(w, b) {
-  const ctx = bookingContext(b);
-  const owner = db.prepare('SELECT brand_color FROM users WHERE id=?').get(b.owner_id);
+async function runWorkflow(w, b) {
+  const ctx = await bookingContext(b);
+  const owner = await db.prepare('SELECT brand_color FROM users WHERE id=?').get(b.owner_id);
   const subject = render(w.subject, ctx);
   const to = w.action === 'email_host' ? ctx.host_email : b.invitee_email;
-  sendEmail({ userId: b.owner_id, to, subject, html: wrapHtml(subject, render(w.body, ctx), owner?.brand_color, w.action === 'email_invitee' && b.status === 'active' ? b : null), kind: `workflow:${w.name}`, bookingUid: b.uid });
+  await sendEmail({ userId: b.owner_id, to, subject, html: wrapHtml(subject, render(w.body, ctx), owner?.brand_color, w.action === 'email_invitee' && b.status === 'active' ? b : null), kind: `workflow:${w.name}`, bookingUid: b.uid });
 }
-export function tickJobs() {
-  const due = db.prepare("SELECT * FROM jobs WHERE status='pending' AND run_at <= ? ORDER BY run_at LIMIT 50").all(new Date().toISOString());
+/** Run due workflow jobs. Claims rows atomically so concurrent ticks never double-send. */
+export async function tickJobs(limit = 50) {
+  const due = await db.prepare(`UPDATE jobs SET status='running', ran_at=now_iso() WHERE id IN (
+      SELECT id FROM jobs WHERE status='pending' AND run_at <= ? ORDER BY run_at LIMIT ? FOR UPDATE SKIP LOCKED) RETURNING *`).all(new Date().toISOString(), limit);
   for (const j of due) {
-    const w = db.prepare('SELECT * FROM workflows WHERE id=?').get(j.workflow_id);
-    const b = mapBooking(db.prepare('SELECT * FROM bookings WHERE id=?').get(j.booking_id));
-    if (w && b && b.status === 'active' && w.active) runWorkflow(w, b);
-    db.prepare("UPDATE jobs SET status='done', ran_at=datetime('now') WHERE id=?").run(j.id);
+    try {
+      const w = await db.prepare('SELECT * FROM workflows WHERE id=?').get(j.workflow_id);
+      const b = mapBooking(await db.prepare('SELECT * FROM bookings WHERE id=?').get(j.booking_id));
+      if (w && b && b.status === 'active' && w.active) await runWorkflow(w, b);
+      await db.prepare("UPDATE jobs SET status='done' WHERE id=?").run(j.id);
+    } catch (e) {
+      console.error('job failed', j.id, e.message);
+      await db.prepare("UPDATE jobs SET status='failed' WHERE id=?").run(j.id);
+    }
   }
+  return due.length;
 }
 
 // ---------------- webhooks ----------------
-export function bookingPayload(b) {
-  const et = mapEventType(db.prepare('SELECT * FROM event_types WHERE id=?').get(b.event_type_id));
-  const hosts = b.host_ids.map((id) => db.prepare('SELECT id, name, email FROM users WHERE id=?').get(id)).filter(Boolean);
+export async function bookingPayload(b) {
+  const et = b.event_type_id ? mapEventType(await db.prepare('SELECT * FROM event_types WHERE id=?').get(b.event_type_id)) : null;
+  const hosts = (await Promise.all(b.host_ids.map((id) => db.prepare('SELECT id, name, email FROM users WHERE id=?').get(id)))).filter(Boolean);
   return {
     uid: b.uid, status: b.status, start_time: b.start_utc, end_time: b.end_utc, duration: b.duration,
     event_type: et ? { id: et.id, name: et.name, slug: et.slug, kind: et.kind } : null, hosts,
@@ -179,12 +201,14 @@ export function bookingPayload(b) {
 }
 export async function fireWebhook(userIds, event, payload) {
   const ids = [...new Set(userIds.filter(Boolean))];
+  const data = await payload; const tasks = [];
   for (const id of ids) {
-    for (const w of db.prepare('SELECT * FROM webhooks WHERE user_id=? AND active=1').all(id)) {
+    for (const w of await db.prepare('SELECT * FROM webhooks WHERE user_id=? AND active=1').all(id)) {
       if (!J(w.events, []).includes(event)) continue;
-      deliver(w, event, payload);
+      tasks.push(deliver(w, event, data));
     }
   }
+  await Promise.allSettled(tasks);
 }
 export async function deliver(w, event, payload) {
   const body = JSON.stringify({ event, created_at: new Date().toISOString(), payload });
@@ -193,44 +217,12 @@ export async function deliver(w, event, payload) {
   let status = 0, response = '';
   try {
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch(w.url, { method: 'POST', body, signal: ctrl.signal, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Cadence-Webhooks/1.0', 'Cadence-Webhook-Signature': `t=${t},v1=${sig}` } });
+    await assertPublicUrl(w.url);
+    const r = await fetch(w.url, { method: 'POST', body, redirect: 'manual', signal: ctrl.signal, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Cadence-Webhooks/1.0', 'Cadence-Webhook-Signature': `t=${t},v1=${sig}` } });
     clearTimeout(timer);
     status = r.status; response = (await r.text()).slice(0, 500);
   } catch (e) { response = String(e.message).slice(0, 300); }
-  db.prepare('INSERT INTO webhook_deliveries (webhook_id, event, status, response, payload) VALUES (?,?,?,?,?)').run(w.id, event, status, response, body.slice(0, 20000));
+  await db.prepare('INSERT INTO webhook_deliveries (webhook_id, event, status, response, payload) VALUES (?,?,?,?,?)').run(w.id, event, status, response, body.slice(0, 20000));
   return { status, response };
 }
 
-// ---------------- external calendars (ICS feeds) ----------------
-export async function syncCalendar(cal) {
-  try {
-    const ical = (await import('node-ical')).default;
-    let url = cal.url.replace(/^webcal:\/\//, 'https://');
-    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch(url, { signal: ctrl.signal }); clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const data = ical.sync.parseICS(text);
-    const from = DateTime.utc().minus({ days: 1 }), to = DateTime.utc().plus({ days: 180 });
-    const busy = [];
-    for (const ev of Object.values(data)) {
-      if (ev.type !== 'VEVENT' || !ev.start) continue;
-      if (ev.transparency === 'TRANSPARENT' || ev.status === 'CANCELLED') continue;
-      const dur = (ev.end ? +ev.end : +ev.start + 3600000) - +ev.start;
-      const push = (s) => { const e = new Date(+s + dur); if (e > from.toJSDate() && s < to.toJSDate()) busy.push({ start: new Date(s).toISOString(), end: e.toISOString(), title: ev.summary ? String(ev.summary.val || ev.summary).slice(0, 80) : 'Busy' }); };
-      if (ev.rrule) {
-        const ex = new Set(Object.values(ev.exdate || {}).map((d) => +new Date(d)));
-        for (const s of ev.rrule.between(from.toJSDate(), to.toJSDate(), true)) if (!ex.has(+s)) push(s);
-      } else push(ev.start);
-      if (busy.length > 5000) break;
-    }
-    db.prepare("UPDATE calendars SET busy=?, last_synced_at=datetime('now'), last_error=NULL WHERE id=?").run(S(busy), cal.id);
-    return { ok: true, count: busy.length };
-  } catch (e) {
-    db.prepare("UPDATE calendars SET last_error=?, last_synced_at=datetime('now') WHERE id=?").run(String(e.message).slice(0, 200), cal.id);
-    return { ok: false, error: e.message };
-  }
-}
-export function syncAllCalendars() {
-  for (const c of db.prepare('SELECT * FROM calendars').all()) syncCalendar(c);
-}

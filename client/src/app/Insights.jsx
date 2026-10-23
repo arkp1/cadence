@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DateTime } from 'luxon';
-import { api } from '../lib.js';
+import { api, ts } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Spinner, useAsync, Empty, Badge, Modal, Tabs } from '../components/ui.jsx';
 
@@ -86,7 +86,7 @@ export function Outbox() {
   const list = data.emails.filter((e) => filter === 'all' || e.kind.startsWith(filter));
   return (
     <div>
-      <div className="page-head"><div><h1>Email outbox</h1><p className="muted">{data.smtp ? 'SMTP is configured — emails are delivered and logged here.' : 'SMTP is not configured, so emails are captured here instead of being sent. Set SMTP_HOST / SMTP_USER / SMTP_PASS to deliver real email.'}</p></div></div>
+      <div className="page-head"><div><h1>Email log</h1><p className="muted">{data.email_enabled ? 'Every email Cadence sends for you (confirmations, reminders, cancellations) is logged here.' : 'Email delivery isn\'t configured on this server yet, so emails are logged here but not sent. The administrator can add RESEND_API_KEY (or SMTP settings) to turn on delivery.'}</p></div></div>
       <Tabs value={filter} onChange={setFilter} tabs={[{ value: 'all', label: 'All' }, { value: 'invitee', label: 'To invitees' }, { value: 'host', label: 'To hosts' }, { value: 'workflow', label: 'Workflows' }]} />
       <div className="card">
         {!list.length ? <Empty icon="✉️" title="No emails yet" /> : (
@@ -94,9 +94,9 @@ export function Outbox() {
             <thead><tr><th>Sent</th><th>To</th><th>Subject</th><th>Type</th><th>Status</th></tr></thead>
             <tbody>{list.map((e) => (
               <tr key={e.id} className="clickable" onClick={() => api(`/outbox/${e.id}`).then((r) => setView(r.email))}>
-                <td className="small">{DateTime.fromSQL(e.created_at, { zone: 'utc' }).setZone(me.user.timezone).toFormat('LLL d, h:mma')}</td><td>{e.to_email}</td><td className="strong">{e.subject}</td>
+                <td className="small">{ts(e.created_at).setZone(me.user.timezone).toFormat('LLL d, h:mma')}</td><td>{e.to_email}</td><td className="strong">{e.subject}</td>
                 <td><Badge color={e.kind.startsWith('workflow') ? 'purple' : e.kind.includes('cancel') ? 'red' : 'blue'}>{e.kind.replace(/_/g, ' ')}</Badge></td>
-                <td>{e.delivered ? <Badge color="green">Delivered</Badge> : e.error ? <Badge color="red">Failed</Badge> : <Badge>Captured</Badge>}</td>
+                <td title={e.error || ''}>{e.delivered ? <Badge color="green">Sent</Badge> : e.error ? <Badge color={data.email_enabled ? 'red' : 'gray'}>{data.email_enabled ? 'Failed' : 'Not sent'}</Badge> : <Badge color="yellow">Sending</Badge>}</td>
               </tr>
             ))}</tbody>
           </table></div>

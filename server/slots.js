@@ -2,7 +2,10 @@
 // (PAST, TOOSOON, RANGE, BUFFER, CALENDAR, EVENT, OVERLAP, DAYMAX/WEEKMAX/MONTHMAX, GROUP,
 //  BLOCK_OUT_DATE, HOSTS, ROUNDROBIN, UNFAIR, USER_EVENT_LIMITS, RESERVED, no_rules, blackout).
 import { DateTime, Interval } from 'luxon';
-import { db, J, mapSchedule, mapBooking, DEFAULT_SETTINGS } from './db.js';
+import { db, J, mapSchedule, mapBooking, DEFAULT_SETTINGS, hasHost } from './db.js';
+
+// Bookings that occupy time: confirmed ones + unpaid ones still inside their checkout hold window.
+export const OCCUPYING = "(status='active' OR (status='pending_payment' AND hold_expires_at > now_iso()))";
 
 const WD = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
@@ -37,13 +40,13 @@ export function hostIdsOf(et) {
   return [et.user_id];
 }
 
-function scheduleFor(et, hostId) {
-  const user = db.prepare('SELECT * FROM users WHERE id=?').get(hostId);
+async function scheduleFor(et, hostId) {
+  const user = await db.prepare('SELECT * FROM users WHERE id=?').get(hostId);
   if (!user) return null;
   let sid = user.default_schedule_id;
   if (et.schedule_id && hostId === et.user_id) sid = et.schedule_id;
-  const s = mapSchedule(db.prepare('SELECT * FROM schedules WHERE id=?').get(sid))
-    || mapSchedule(db.prepare('SELECT * FROM schedules WHERE user_id=? ORDER BY id LIMIT 1').get(hostId));
+  const s = mapSchedule(await db.prepare('SELECT * FROM schedules WHERE id=? AND user_id=?').get(sid, hostId))
+    || mapSchedule(await db.prepare('SELECT * FROM schedules WHERE user_id=? ORDER BY id LIMIT 1').get(hostId));
   return { user, schedule: s };
 }
 
@@ -59,21 +62,21 @@ function intervalsForDate(schedule, date) {
   return { intervals: (schedule.rules || {})[wd] || [], source: 'rules', weekday: wd };
 }
 
-function hostBookings(hostId, fromISO, toISO, excludeUid) {
-  return db.prepare(`SELECT * FROM bookings WHERE status='active' AND start_utc < ? AND end_utc > ?
-      AND EXISTS (SELECT 1 FROM json_each(bookings.host_ids) WHERE value = ?) AND (? IS NULL OR uid <> ?)`)
-    .all(toISO, fromISO, hostId, excludeUid ?? null, excludeUid ?? null).map(mapBooking);
+async function hostBookings(hostId, fromISO, toISO, excludeUid) {
+  return (await db.prepare(`SELECT * FROM bookings WHERE ${OCCUPYING} AND start_utc < ? AND end_utc > ?
+      AND ${hasHost()} AND (?::text IS NULL OR uid <> ?)`)
+    .all(toISO, fromISO, hostId, excludeUid ?? null, excludeUid ?? null)).map(mapBooking);
 }
 
-function hostBusy(hostId) {
-  const rows = db.prepare('SELECT busy FROM calendars WHERE user_id=? AND check_conflicts=1').all(hostId);
+async function hostBusy(hostId) {
+  const rows = await db.prepare('SELECT busy FROM calendars WHERE user_id=? AND check_conflicts=1').all(hostId);
   const out = [];
   for (const r of rows) for (const b of J(r.busy, [])) out.push({ s: Date.parse(b.start), e: Date.parse(b.end), title: b.title });
   return out;
 }
 
-function hostReservations(hostId) {
-  const polls = db.prepare(`SELECT * FROM polls WHERE user_id=? AND status='open' AND reserve_times=1`).all(hostId);
+async function hostReservations(hostId) {
+  const polls = await db.prepare(`SELECT * FROM polls WHERE user_id=? AND status='open' AND reserve_times=1`).all(hostId);
   const out = [];
   for (const p of polls) for (const o of J(p.options, [])) {
     const s = Date.parse(o.start); out.push({ s, e: s + p.duration * 60000, title: p.title, poll_id: p.id });
@@ -81,7 +84,7 @@ function hostReservations(hostId) {
   return out;
 }
 
-function timeOffFor(hostId) {
+async function timeOffFor(hostId) {
   return db.prepare('SELECT * FROM time_off WHERE user_id=?').all(hostId);
 }
 
@@ -90,7 +93,7 @@ function timeOffFor(hostId) {
  * @param et mapped event type
  * @param opts { start: ISO date (inclusive), end: ISO date (inclusive), tz: invitee tz, duration, excludeUid, diagnostics, now }
  */
-export function computeSlots(et, opts) {
+export async function computeSlots(et, opts) {
   const st = settingsOf(et);
   const duration = Number(opts.duration) || et.duration;
   const tz = opts.tz && DateTime.local().setZone(opts.tz).isValid ? opts.tz : 'UTC';
@@ -101,7 +104,7 @@ export function computeSlots(et, opts) {
   const before = Number(st.buffer_before) || 0, after = Number(st.buffer_after) || 0;
   const isGroup = et.kind === 'group';
   const hostIds = hostIdsOf(et);
-  const owner = scheduleFor(et, et.user_id);
+  const owner = await scheduleFor(et, et.user_id);
   const ownerZone = owner?.schedule?.timezone || owner?.user?.timezone || 'UTC';
 
   const padFrom = rangeStart.minus({ days: 2 }).toUTC().toISO();
@@ -110,10 +113,10 @@ export function computeSlots(et, opts) {
   // ---- per host data ----
   const hosts = [];
   for (const hid of hostIds) {
-    const sf = scheduleFor(et, hid);
+    const sf = await scheduleFor(et, hid);
     if (!sf || !sf.schedule) continue;
     const zone = sf.schedule.timezone || sf.user.timezone || 'UTC';
-    const bookings = hostBookings(hid, padFrom, padTo, opts.excludeUid);
+    const bookings = await hostBookings(hid, padFrom, padTo, opts.excludeUid);
     // starts of candidate slots within working hours
     const candidates = new Set();
     const dayNotes = {};
@@ -133,17 +136,17 @@ export function computeSlots(et, opts) {
       d = d.plus({ days: 1 });
     }
     // meeting counts for this event type (round-robin fairness)
-    const etCount = db.prepare(`SELECT COUNT(DISTINCT start_utc) c FROM bookings WHERE event_type_id=? AND status='active'
-      AND EXISTS (SELECT 1 FROM json_each(bookings.host_ids) WHERE value = ?)`).get(et.id, hid).c;
+    const etCount = (await db.prepare(`SELECT COUNT(DISTINCT start_utc) c FROM bookings WHERE event_type_id=? AND status='active'
+      AND ${hasHost()}`).get(et.id, hid)).c;
     hosts.push({
-      id: hid, name: sf.user.name, user: sf.user, zone, schedule: sf.schedule, bookings, busy: hostBusy(hid),
-      reserved: hostReservations(hid), timeOff: timeOffFor(hid), candidates, dayNotes, etCount,
+      id: hid, name: sf.user.name, user: sf.user, zone, schedule: sf.schedule, bookings, busy: await hostBusy(hid),
+      reserved: await hostReservations(hid), timeOff: await timeOffFor(hid), candidates, dayNotes, etCount,
     });
   }
 
   // ---- event-level counts (limits / group) ----
-  const etBookings = db.prepare(`SELECT start_utc, COUNT(*) n FROM bookings WHERE event_type_id=? AND status='active'
-      AND start_utc >= ? AND start_utc < ? AND (? IS NULL OR uid <> ?) GROUP BY start_utc`)
+  const etBookings = await db.prepare(`SELECT start_utc, COUNT(*) n FROM bookings WHERE event_type_id=? AND ${OCCUPYING}
+      AND start_utc >= ? AND start_utc < ? AND (?::text IS NULL OR uid <> ?) GROUP BY start_utc`)
     .all(et.id, rangeStart.minus({ days: 32 }).toUTC().toISO(), rangeEnd.plus({ days: 32 }).toUTC().toISO(), opts.excludeUid ?? null, opts.excludeUid ?? null);
   const groupCount = new Map(etBookings.map((r) => [Date.parse(r.start_utc), r.n]));
   const countInPeriod = (ms, unit) => {
@@ -274,21 +277,21 @@ function dedupeReasons(rs) {
 }
 
 /** Validate a specific start time and choose host(s). Returns { ok, hostIds, reason } */
-export function checkAndAssign(et, startISO, duration, excludeUid) {
+export async function checkAndAssign(et, startISO, duration, excludeUid) {
   const s = DateTime.fromISO(startISO, { zone: 'utc' });
   if (!s.isValid) return { ok: false, reason: 'Invalid start time' };
-  const res = computeSlots(et, { start: s.toISODate(), end: s.toISODate(), tz: 'UTC', duration, excludeUid });
+  const res = await computeSlots(et, { start: s.toISODate(), end: s.toISODate(), tz: 'UTC', duration, excludeUid });
   const slot = res._slots.find((x) => x.start === s.toMillis());
   if (!slot) return { ok: false, reason: 'That time is not offered by this event.' };
   if (!slot.available) return { ok: false, reason: REASONS[slot.reasons[0]?.code] || 'That time is no longer available.', code: slot.reasons[0]?.code };
   if (et.kind === 'collective') return { ok: true, hostIds: hostIdsOf(et) };
   if (et.kind === 'round_robin') {
     // pick host with fewest meetings of this event type; tie-break: least recently assigned
-    const scored = slot.availableHosts.map((id) => {
-      const c = db.prepare(`SELECT COUNT(*) c, MAX(created_at) m FROM bookings WHERE event_type_id=? AND status='active'
-        AND EXISTS (SELECT 1 FROM json_each(bookings.host_ids) WHERE value = ?)`).get(et.id, id);
+    const scored = (await Promise.all(slot.availableHosts.map(async (id) => {
+      const c = await db.prepare(`SELECT COUNT(*) c, MAX(created_at) m FROM bookings WHERE event_type_id=? AND status='active'
+        AND ${hasHost()}`).get(et.id, id);
       return { id, c: c.c, m: c.m || '' };
-    }).sort((a, b) => a.c - b.c || a.m.localeCompare(b.m));
+    }))).sort((a, b) => a.c - b.c || a.m.localeCompare(b.m));
     return { ok: true, hostIds: [scored[0].id] };
   }
   return { ok: true, hostIds: [et.user_id], spotsLeft: slot.spotsLeft };

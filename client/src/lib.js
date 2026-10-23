@@ -1,14 +1,10 @@
 import { DateTime } from 'luxon';
 
-const TOKEN_KEY = 'cadence_token';
-export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
-export const setToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ } };
-
+// Sessions are httpOnly cookies set by the server after Google sign-in — nothing is stored in localStorage.
 export async function api(path, { method = 'GET', body, headers = {} } = {}) {
-  const tok = getToken();
   const res = await fetch(path.startsWith('/api') ? path : `/api${path}`, {
-    method, credentials: 'include',
-    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(tok ? { Authorization: `Bearer ${tok}` } : {}), ...headers },
+    method, credentials: 'same-origin',
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
@@ -19,11 +15,16 @@ export async function api(path, { method = 'GET', body, headers = {} } = {}) {
 }
 
 export async function download(path, filename) {
-  const tok = getToken();
-  const res = await fetch(`/api${path}`, { credentials: 'include', headers: tok ? { Authorization: `Bearer ${tok}` } : {} });
+  const res = await fetch(`/api${path}`, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const blob = await res.blob(); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+
+/** Parse a server timestamp (ISO 8601; tolerates legacy "YYYY-MM-DD HH:MM:SS"). */
+export const ts = (s) => { if (!s) return DateTime.invalid('empty'); const d = DateTime.fromISO(String(s), { zone: 'utc' }); return d.isValid ? d : DateTime.fromSQL(String(s), { zone: 'utc' }); };
+/** Start Google sign-in (full-page redirect). */
+export const googleSignIn = (next = '') => { window.location.href = `/api/auth/google?tz=${encodeURIComponent(browserTz())}${next ? `&next=${encodeURIComponent(next)}` : ''}`; };
 
 export const browserTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } };
 
@@ -50,8 +51,8 @@ export function fmtDate(iso, zone, f = 'cccc, LLLL d, yyyy') { return DateTime.f
 export const LOCATION_TYPES = {
   jitsi: { label: 'Jitsi video (auto-generated link)', icon: '🎥', needsValue: false },
   zoom: { label: 'Zoom', icon: '📹', needsValue: true, placeholder: 'Your Zoom personal meeting link' },
-  google_meet: { label: 'Google Meet', icon: '🟢', needsValue: true, placeholder: 'https://meet.google.com/…' },
-  teams: { label: 'Microsoft Teams', icon: '🟣', needsValue: true, placeholder: 'Teams meeting link' },
+  google_meet: { label: 'Google Meet', icon: '🟢', needsValue: true, optional: true, placeholder: 'Leave blank to auto-create a Meet link per booking (needs Google Calendar connected)' },
+  teams: { label: 'Microsoft Teams', icon: '🟣', needsValue: true, optional: true, placeholder: 'Leave blank to auto-create a Teams link per booking (needs Outlook connected)' },
   in_person: { label: 'In-person meeting', icon: '📍', needsValue: true, placeholder: 'Address' },
   phone_outbound: { label: 'Phone call (I will call invitee)', icon: '📞', needsValue: false },
   phone_inbound: { label: 'Phone call (invitee calls me)', icon: '☎️', needsValue: true, placeholder: 'Your phone number' },

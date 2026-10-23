@@ -40,7 +40,7 @@ export default function EventTypes() {
         <Button onClick={() => setCreating(true)}>+ New event type</Button>
       </div>
       <div className="row between wrap gap mb">
-        <div className="row gap"><Avatar name={me.user.name} color={me.user.avatar_color} size={36} /><div><div className="strong">{me.user.name}</div><a className="small link" href={`/${me.user.slug}`} target="_blank" rel="noreferrer">{absUrl(`/${me.user.slug}`)}</a></div></div>
+        <div className="row gap"><Avatar name={me.user.name} color={me.user.avatar_color} src={me.user.avatar_url} size={36} /><div><div className="strong">{me.user.name}</div><a className="small link" href={`/${me.user.slug}`} target="_blank" rel="noreferrer">{absUrl(`/${me.user.slug}`)}</a></div></div>
         <input className="search" placeholder="Search event types" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="et-grid">

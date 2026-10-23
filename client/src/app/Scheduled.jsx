@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
-import { api, download, fmtTime, fmtDate, absUrl, LOCATION_TYPES, locationLabel, durLabel } from '../lib.js';
+import { api, download, fmtTime, fmtDate, absUrl, LOCATION_TYPES, locationLabel, durLabel, ts } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, Tabs, Spinner, Empty, Badge, Confirm, Field, Toggle, CopyButton, useToast } from '../components/ui.jsx';
 
@@ -90,7 +90,7 @@ export default function Scheduled() {
                             {detail.routing && <div><span>Routing form</span>{detail.routing.form}: {detail.routing.answers.map((a) => `${a.label}: ${a.value}`).join(' · ')}</div>}
                             {detail.payment_status && <div><span>Payment</span>{(detail.price_cents / 100).toFixed(2)} {detail.currency} — {detail.payment_status}</div>}
                             {detail.cancel_reason && <div><span>Cancel reason</span>{detail.cancel_reason} ({detail.canceled_by})</div>}
-                            <div><span>Booked</span>{DateTime.fromSQL(detail.created_at, { zone: 'utc' }).setZone(tz).toFormat('LLL d, yyyy h:mma')} via {detail.source.replace(/_/g, ' ')}</div>
+                            <div><span>Booked</span>{ts(detail.created_at).setZone(tz).toFormat('LLL d, yyyy h:mma')} via {detail.source.replace(/_/g, ' ')}</div>
                             {detail.emails?.length > 0 && <div><span>Emails sent</span>{detail.emails.length} ({[...new Set(detail.emails.map((e) => e.kind.split(':')[0]))].join(', ')})</div>}
                           </div>
                           <Field label="Meeting notes (private)">

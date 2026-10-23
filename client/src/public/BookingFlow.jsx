@@ -25,7 +25,7 @@ export function EventSummary({ event, duration, reschedule, selected, tz, timeFo
       <div className="host-row">
         {event.hosts?.length > 1
           ? <div className="avatar-stack">{event.hosts.slice(0, 4).map((h) => <Avatar key={h.id} name={h.name} color={h.avatar_color} size={36} />)}</div>
-          : <Avatar name={event.owner?.name} color={event.owner?.avatar_color} size={44} />}
+          : <Avatar name={event.owner?.name} color={event.owner?.avatar_color} src={event.owner?.avatar_url} size={44} />}
       </div>
       <div className="muted host-name">{event.kind === 'round_robin' ? `${event.owner?.name} · Team` : event.hosts?.length > 1 ? event.hosts.map((h) => h.name).join(', ') : event.owner?.name}</div>
       <h1 className="event-title">{event.name}</h1>
@@ -239,6 +239,11 @@ function BookingForm({ event, slot, duration, tz, linkToken, reschedule, routing
           answers: Object.entries(answers).map(([id, value]) => ({ id, value })), location: { index: locIdx, value: locValue },
           link_token: linkToken, reschedule_uid: reschedule?.uid, reschedule_reason: reason, routing_submission_id: routing?.submission_id, embed: isEmbed() },
       });
+      if (r.checkout_url) {
+        // Paid event: the slot is held while the invitee pays on Stripe Checkout (which can't run inside an iframe).
+        if (isEmbed()) { try { window.top.location.href = r.checkout_url; } catch { window.open(r.checkout_url, '_blank'); } } else window.location.href = r.checkout_url;
+        return;
+      }
       onDone(r.booking);
     } catch (ex) { setErr(ex.message); setBusy(false); }
   };
@@ -280,12 +285,12 @@ function BookingForm({ event, slot, duration, tz, linkToken, reschedule, routing
       {st.price_cents > 0 && !reschedule && (
         <div className="pay-box">
           <div className="strong">Payment: {fmtMoney(st.price_cents, st.currency)}</div>
-          <div className="small muted">Demo mode — no card is charged. Connect a payment provider to collect real payments.</div>
+          <div className="small muted">You'll pay securely on Stripe. Your time is held for 30 minutes while you complete payment.</div>
         </div>
       )}
       <p className="small muted">By proceeding, you confirm that you have read and agree to the host's terms and privacy notice.</p>
       {err && <div className="alert alert-error">{err}</div>}
-      <Button type="submit" loading={busy} className="btn-pill">{reschedule ? 'Reschedule Event' : st.price_cents > 0 ? 'Pay & Schedule Event' : 'Schedule Event'}</Button>
+      <Button type="submit" loading={busy} className="btn-pill">{reschedule ? 'Reschedule Event' : st.price_cents > 0 ? 'Continue to payment' : 'Schedule Event'}</Button>
     </form>
   );
 }

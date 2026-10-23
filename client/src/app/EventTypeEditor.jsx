@@ -25,6 +25,7 @@ export default function EventTypeEditor() {
   const toast = useToast();
   const { me } = useAuth();
   const [et, setEt] = useState(null);
+  const [payments, setPayments] = useState(false);
   const [schedules, setSchedules] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,7 +34,7 @@ export default function EventTypeEditor() {
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    Promise.all([api(`/event-types/${id}`), api('/schedules')]).then(([a, b]) => { setEt(a.event_type); setSchedules(b.schedules); }).catch(() => nav('/app'));
+    Promise.all([api(`/event-types/${id}`), api('/schedules')]).then(([a, b]) => { setEt(a.event_type); setPayments(!!a.payments); setSchedules(b.schedules); }).catch(() => nav('/app'));
   }, [id, nav]);
   if (!et) return <Spinner center />;
   const st = et.settings;
@@ -112,7 +113,7 @@ export default function EventTypeEditor() {
             <select value={l.type} onChange={(e) => { const arr = [...et.locations]; arr[i] = { type: e.target.value, label: '', value: '' }; up({ locations: arr }); }}>
               {Object.entries(LOCATION_TYPES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
             </select>
-            {LOCATION_TYPES[l.type]?.needsValue && <input placeholder={LOCATION_TYPES[l.type].placeholder} value={l.value || ''} onChange={(e) => { const arr = [...et.locations]; arr[i] = { ...l, value: e.target.value }; up({ locations: arr }); }} />}
+            {LOCATION_TYPES[l.type]?.needsValue && <input title={LOCATION_TYPES[l.type].placeholder} placeholder={LOCATION_TYPES[l.type].placeholder} value={l.value || ''} onChange={(e) => { const arr = [...et.locations]; arr[i] = { ...l, value: e.target.value }; up({ locations: arr }); }} />}
             <input placeholder="Display label (optional)" value={l.label || ''} onChange={(e) => { const arr = [...et.locations]; arr[i] = { ...l, label: e.target.value }; up({ locations: arr }); }} />
             <button className="icon-btn" onClick={() => up({ locations: et.locations.filter((_, j) => j !== i) })} aria-label="Remove">✕</button>
           </div>
@@ -233,10 +234,11 @@ export default function EventTypeEditor() {
         </div>
       </Section>
 
-      <Section title="Payment" subtitle={st.price_cents > 0 ? `${(st.price_cents / 100).toFixed(2)} ${st.currency}` : 'Free'} open={false}>
+      <Section title="Payment" subtitle={payments ? (st.price_cents > 0 ? `${(st.price_cents / 100).toFixed(2)} ${st.currency} via Stripe` : 'Free') : 'Free (Stripe not configured)'} open={false}>
+        {!payments && <div className="alert mb">To charge for meetings, the site administrator needs to add <code>STRIPE_SECRET_KEY</code> and <code>STRIPE_WEBHOOK_SECRET</code>.</div>}
         <div className="grid-2">
-          <Field label="Price" hint="0 = free. Demo mode: payments are recorded, not charged."><input type="number" min="0" step="0.01" value={(st.price_cents || 0) / 100} onChange={(e) => ups({ price_cents: Math.round(Number(e.target.value) * 100) })} /></Field>
-          <Field label="Currency"><select value={st.currency} onChange={(e) => ups({ currency: e.target.value })}>{['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'SGD', 'JPY'].map((c) => <option key={c}>{c}</option>)}</select></Field>
+          <Field label="Price" hint="0 = free. Invitees pay on Stripe Checkout before the booking is confirmed."><input type="number" min="0" step="0.01" disabled={!payments} value={(st.price_cents || 0) / 100} onChange={(e) => ups({ price_cents: Math.max(0, Math.round(Number(e.target.value) * 100)) })} /></Field>
+          <Field label="Currency"><select disabled={!payments} value={st.currency} onChange={(e) => ups({ currency: e.target.value })}>{['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'SGD', 'JPY'].map((c) => <option key={c}>{c}</option>)}</select></Field>
         </div>
       </Section>
       {share && <ShareModal et={et} onClose={() => setShare(false)} />}
