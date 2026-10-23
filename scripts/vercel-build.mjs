@@ -13,7 +13,7 @@ const FN = path.join(OUT, 'functions/server.func');
 
 // Warn early (doesn't fail the build: the app shows a setup page until configured).
 const missing = ['APP_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'].filter((k) => !process.env[k]);
-if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) missing.unshift('DATABASE_URL');
+if (!Object.keys(process.env).some((k) => /(^|_)(DATABASE|POSTGRES)_URL$/.test(k) && process.env[k])) missing.unshift('DATABASE_URL');
 if (missing.length) console.warn(`⚠️  Missing env vars: ${missing.join(', ')} — the deployed app will show its setup page.`);
 
 // 1) client

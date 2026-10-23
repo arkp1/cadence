@@ -1,8 +1,18 @@
 // Central runtime configuration. Everything comes from environment variables.
 const env = process.env;
 
+/** Postgres URL. Accepts DATABASE_URL / POSTGRES_URL, or the prefixed names Vercel's Neon
+ *  integration creates when a custom prefix is chosen (e.g. MYAPP_DATABASE_URL). */
+export function findDatabaseUrl(e = process.env) {
+  if (e.DATABASE_URL) return e.DATABASE_URL;
+  if (e.POSTGRES_URL) return e.POSTGRES_URL;
+  const key = Object.keys(e).sort().find((k) => /_DATABASE_URL$/.test(k) && e[k])
+    || Object.keys(e).sort().find((k) => /_POSTGRES_URL$/.test(k) && e[k]);
+  return key ? e[key] : '';
+}
+
 export const config = {
-  databaseUrl: env.DATABASE_URL || env.POSTGRES_URL || '',
+  databaseUrl: findDatabaseUrl(env),
   appSecret: env.APP_SECRET || '',
   publicUrl: (env.PUBLIC_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : '')).replace(/\/$/, ''),
   google: { clientId: env.GOOGLE_CLIENT_ID || '', clientSecret: env.GOOGLE_CLIENT_SECRET || '' },
