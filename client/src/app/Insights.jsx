@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { api, ts } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Spinner, useAsync, Empty, Badge, Modal, Tabs } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 export function Contacts() {
   const { data, loading } = useAsync(() => api('/contacts'), []);
@@ -13,7 +14,7 @@ export function Contacts() {
     <div>
       <div className="page-head"><div><h1>Contacts</h1><p className="muted">Everyone who has booked with you.</p></div><input className="search" placeholder="Search contacts" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <div className="card">
-        {!list.length ? <Empty icon="👥" title="No contacts yet" /> : (
+        {!list.length ? <Empty icon="users" title="No contacts yet" /> : (
           <div className="table-wrap"><table className="table">
             <thead><tr><th>Name</th><th>Email</th><th>Meetings</th><th>Canceled</th><th>No-shows</th><th>Time zone</th><th>Last meeting</th></tr></thead>
             <tbody>{list.map((c) => (
@@ -57,8 +58,8 @@ export function Analytics() {
       {loading ? <Spinner center /> : (
         <>
           <div className="stat-grid">
-            {[['Created', data.totals.created, '📅'], ['Completed / upcoming', data.totals.active, '✅'], ['Canceled', data.totals.canceled, '✕'], ['Rescheduled', data.totals.rescheduled, '🔁'], ['No-shows', data.totals.no_shows, '👻']].map(([l, v, i]) => (
-              <div key={l} className="card stat"><div className="stat-icon">{i}</div><div className="stat-val">{v}</div><div className="small muted">{l}</div></div>
+            {[['Created', data.totals.created, 'calendar'], ['Completed / upcoming', data.totals.active, 'check'], ['Canceled', data.totals.canceled, 'x'], ['Rescheduled', data.totals.rescheduled, 'refresh'], ['No-shows', data.totals.no_shows, 'eye']].map(([l, v, i]) => (
+              <div key={l} className="card stat"><div className="stat-icon"><Icon name={i} size={17} /></div><div className="stat-val">{v}</div><div className="small muted">{l}</div></div>
             ))}
           </div>
           <div className="card pad mt"><div className="row between"><h3>Events over time</h3><div className="small"><span className="legend" style={{ background: 'var(--brand)' }} /> created <span className="legend" style={{ background: '#ef4444' }} /> canceled</div></div><LineChart series={data.series} /></div>
@@ -89,7 +90,7 @@ export function Outbox() {
       <div className="page-head"><div><h1>Email log</h1><p className="muted">{data.email_enabled ? 'Every email Cadence sends for you (confirmations, reminders, cancellations) is logged here.' : 'Email delivery isn\'t configured on this server yet, so emails are logged here but not sent. The administrator can add RESEND_API_KEY (or SMTP settings) to turn on delivery.'}</p></div></div>
       <Tabs value={filter} onChange={setFilter} tabs={[{ value: 'all', label: 'All' }, { value: 'invitee', label: 'To invitees' }, { value: 'host', label: 'To hosts' }, { value: 'workflow', label: 'Workflows' }]} />
       <div className="card">
-        {!list.length ? <Empty icon="✉️" title="No emails yet" /> : (
+        {!list.length ? <Empty icon="mail" title="No emails yet" /> : (
           <div className="table-wrap"><table className="table">
             <thead><tr><th>Sent</th><th>To</th><th>Subject</th><th>Type</th><th>Status</th></tr></thead>
             <tbody>{list.map((e) => (

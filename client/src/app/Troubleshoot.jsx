@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import { api, fmtTime, durLabel } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Spinner, TimezoneSelect, Badge, Button } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 const CODE_COLORS = { PAST: 'gray', TOOSOON: 'yellow', RANGE: 'gray', BUFFER: 'yellow', CALENDAR: 'red', EVENT: 'red', OVERLAP: 'red', DAYMAX: 'purple', WEEKMAX: 'purple', MONTHMAX: 'purple', GROUP: 'purple', BLOCK_OUT_DATE: 'blue', HOSTS: 'red', ROUNDROBIN: 'red', UNFAIR: 'yellow', USER_EVENT_LIMITS: 'purple', RESERVED: 'blue', OUTSIDE_HOURS: 'gray' };
 
@@ -29,15 +30,15 @@ export default function Troubleshoot() {
   return (
     <div>
       <div className="page-head">
-        <div className="row gap"><Link to={`/app/event-types/${id}`} className="icon-btn">←</Link>
+        <div className="row gap"><Link to={`/app/event-types/${id}`} className="icon-btn" aria-label="Back to event type"><Icon name="arrow-left" size={17} /></Link>
           <div><div className="small muted">Troubleshooting availability</div><h1>{et?.name || '…'}</h1></div></div>
       </div>
       <div className="card pad">
         <p className="muted small">See why specific times are not available on your booking page. Don't worry — your invitees will never see this information.</p>
         <div className="row gap wrap">
-          <Button variant="ghost" size="sm" onClick={() => shift(-1)}>‹</Button>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <Button variant="ghost" size="sm" onClick={() => shift(1)}>›</Button>
+          <Button variant="ghost" size="sm" onClick={() => shift(-1)} aria-label="Previous day"><Icon name="chevron-left" size={15} /></Button>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+          <Button variant="ghost" size="sm" onClick={() => shift(1)} aria-label="Next day"><Icon name="chevron-right" size={15} /></Button>
           {et?.durations?.length > 1 && <select value={duration} onChange={(e) => setDuration(e.target.value)}><option value="">Default ({durLabel(et.duration)})</option>{et.durations.map((d) => <option key={d} value={d}>{durLabel(d)}</option>)}</select>}
           <TimezoneSelect value={tz} onChange={setTz} compact />
         </div>

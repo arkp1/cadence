@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
-import { api, absUrl, ts } from '../lib.js';
+import { api, absUrl, ts, isDemo } from '../lib.js';
 import { useAuth, useConfig } from '../auth.js';
 import { Button, Field, Spinner, useAsync, useToast, Tabs, Toggle, CopyButton, Badge, Empty, Modal, Confirm } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import { embedCode } from './ShareModal.jsx';
 
 export default function Integrations() {
@@ -11,7 +12,12 @@ export default function Integrations() {
   return (
     <div>
       <div className="page-head"><div><h1>Integrations &amp; apps</h1><p className="muted">Connect calendars, automate with webhooks and the API, and embed Cadence on your website.</p></div></div>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: 'calendars', label: '📆 Calendars' }, { value: 'webhooks', label: '🪝 Webhooks' }, { value: 'api', label: '🔑 API' }, { value: 'embed', label: '🧩 Embed' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { value: 'calendars', label: <><Icon name="calendar" size={14} /> Calendars</> },
+        { value: 'webhooks', label: <><Icon name="plug" size={14} /> Webhooks</> },
+        { value: 'api', label: <><Icon name="lock" size={14} /> API</> },
+        { value: 'embed', label: <><Icon name="external" size={14} /> Embed</> },
+      ]} />
       {tab === 'calendars' && <Calendars />}
       {tab === 'webhooks' && <Webhooks />}
       {tab === 'api' && <ApiTokens />}
@@ -37,7 +43,10 @@ function Calendars() {
   if (loading) return <Spinner center />;
   const feed = absUrl(me.user.feed_path);
   const writable = data.calendars.filter((c) => c.can_write && c.provider !== 'ics');
-  const connect = (p) => { window.location.href = `/api/auth/calendar/${p}`; };
+  const connect = (p) => {
+    if (isDemo()) { toast('Calendar connections are simulated in preview mode'); return; }
+    window.location.href = `/api/auth/calendar/${p}`;
+  };
   const synced = (c) => (c.last_error ? <span className="red">⚠ {c.last_error}</span> : <span className="muted">{c.check_conflicts ? `${c.busy_count} busy blocks · synced ${c.last_synced_at ? ts(c.last_synced_at).toRelative() : 'pending'}` : 'not checked'}</span>);
   const toggle = async (c, v) => { await api(`/calendars/${c.id}`, { method: 'PATCH', body: { check_conflicts: v } }); if (v) await api(`/calendars/${c.id}/sync`, { method: 'POST' }); reload(); };
   return (
@@ -46,14 +55,14 @@ function Calendars() {
         <div><h3>Calendar connections</h3>
           <p className="small muted">Connected calendars are checked for conflicts, so invitees can only book when you're free. Bookings are written to the calendar you pick below. Busy times refresh automatically, and just before every booking.</p></div>
         <div className="row gap wrap">
-          {cfg.features.google_calendar && <Button variant="secondary" onClick={() => connect('google')}>📅 Connect Google Calendar</Button>}
-          {cfg.features.microsoft_calendar && <Button variant="secondary" onClick={() => connect('microsoft')}>📨 Connect Outlook / Microsoft 365</Button>}
+          {cfg.features.google_calendar && <Button variant="secondary" onClick={() => connect('google')}><Icon name="calendar" size={15} /> Connect Google Calendar</Button>}
+          {cfg.features.microsoft_calendar && <Button variant="secondary" onClick={() => connect('microsoft')}><Icon name="mail" size={15} /> Connect Outlook / Microsoft 365</Button>}
           {!cfg.features.google_calendar && !cfg.features.microsoft_calendar && <span className="small muted">No calendar providers are configured on this server.</span>}
         </div>
         {data.accounts.map((a) => (
           <div key={a.id} className="cal-group">
             <div className="cal-group-head">
-              <div className="connect-logo">{a.provider === 'google' ? '📅' : '📨'}</div>
+              <div className="connect-logo"><Icon name={a.provider === 'google' ? 'calendar' : 'mail'} size={18} /></div>
               <div className="grow"><div className="strong">{a.provider === 'google' ? 'Google Calendar' : 'Outlook'}</div><div className="small muted">{a.email}</div>
                 {a.last_error && <div className="small red">⚠ {a.last_error} <button className="link" onClick={() => connect(a.provider)}>Reconnect</button></div>}</div>
               <Button size="sm" variant="ghost" onClick={async () => { try { await api(`/calendar-accounts/${a.id}/refresh`, { method: 'POST' }); reload(); toast('Calendar list refreshed'); } catch (e) { toast(e.message, 'err'); } }}>Refresh list</Button>
@@ -72,7 +81,10 @@ function Calendars() {
           <Field label="Add new bookings to" hint={data.features?.email ? 'Cadence emails the invitee a confirmation with a calendar invite.' : 'Email isn\'t configured, so Google/Outlook will send the invitee the calendar invitation.'}>
             <select value={data.write_calendar_id || ''} onChange={async (e) => { try { await api('/calendars/write-target', { method: 'PUT', body: { calendar_id: e.target.value || null } }); reload(); toast('Saved'); } catch (ex) { toast(ex.message, 'err'); } }}>
               <option value="">Don't add bookings to a calendar</option>
-              {writable.map((c) => <option key={c.id} value={c.id}>{c.name} ({data.accounts.find((a) => a.id === c.account_id)?.email})</option>)}
+              {writable.map((c) => {
+                const email = data.accounts.find((a) => a.id === c.account_id)?.email;
+                return <option key={c.id} value={c.id}>{c.name}{email && email !== c.name ? ` (${email})` : ''}</option>;
+              })}
             </select>
           </Field>
         )}
@@ -134,7 +146,7 @@ function Webhooks() {
         <Button className="mt-sm" onClick={async () => { try { const r = await api('/webhooks', { method: 'POST', body: f }); setCreated(r.webhook); setF({ url: '', events: f.events }); reload(); } catch (e) { toast(e.message, 'err'); } }}>Create webhook</Button>
       </div>
       <div className="card">
-        {!data.webhooks.length ? <Empty icon="🪝" title="No webhooks" /> : (
+        {!data.webhooks.length ? <Empty icon="plug" title="No webhooks" /> : (
           <table className="table"><thead><tr><th>URL</th><th>Events</th><th>Active</th><th></th></tr></thead>
             <tbody>{data.webhooks.map((w) => (
               <tr key={w.id}><td className="ellipsis" style={{ maxWidth: 280 }}>{w.url}</td><td className="small">{w.events.join(', ')}</td>

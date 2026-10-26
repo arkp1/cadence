@@ -1,7 +1,12 @@
 import { DateTime } from 'luxon';
+import { isDemo, startDemo, exitDemo, demoApi, demoCsv } from './demo.js';
+
+export { isDemo, startDemo, exitDemo };
 
 // Sessions are httpOnly cookies set by the server after Google sign-in — nothing is stored in localStorage.
 export async function api(path, { method = 'GET', body, headers = {} } = {}) {
+  // Preview mode: answer every API call in the browser with sample data.
+  if (isDemo()) return demoApi(path, { method, body });
   const res = await fetch(path.startsWith('/api') ? path : `/api${path}`, {
     method, credentials: 'same-origin',
     headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
@@ -15,6 +20,12 @@ export async function api(path, { method = 'GET', body, headers = {} } = {}) {
 }
 
 export async function download(path, filename) {
+  if (isDemo()) {
+    const blob = new Blob([demoCsv()], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    return;
+  }
   const res = await fetch(`/api${path}`, { credentials: 'same-origin' });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const blob = await res.blob(); const a = document.createElement('a');
@@ -64,6 +75,13 @@ export function locationLabel(l) {
   const t = LOCATION_TYPES[l.type];
   return l.label || t?.label || l.type;
 }
+const LOCATION_ICONS = {
+  jitsi: 'video', zoom: 'video', google_meet: 'video', teams: 'video',
+  in_person: 'map-pin', phone_outbound: 'phone', phone_inbound: 'phone',
+  custom: 'link', ask_invitee: 'help',
+};
+/** Icon name (see components/icons.jsx) for a location type. */
+export const locationIcon = (type) => LOCATION_ICONS[type] || 'globe';
 
 export const KIND_LABELS = { one_on_one: 'One-on-One', group: 'Group', round_robin: 'Round Robin', collective: 'Collective' };
 export const KIND_DESCRIPTIONS = {

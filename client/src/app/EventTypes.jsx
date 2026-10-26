@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, absUrl, durLabel, KIND_LABELS, KIND_DESCRIPTIONS, LOCATION_TYPES } from '../lib.js';
+import { api, absUrl, durLabel, KIND_LABELS, KIND_DESCRIPTIONS } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, CopyButton, Toggle, Modal, Spinner, useAsync, useToast, Avatar, Confirm, Badge } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import ShareModal from './ShareModal.jsx';
 
 export default function EventTypes() {
@@ -36,12 +37,18 @@ export default function EventTypes() {
   return (
     <div onClick={() => setMenu(null)}>
       <div className="page-head">
-        <div><h1>Event types</h1><p className="muted">Create events to share for people to book on your calendar.</p></div>
-        <Button onClick={() => setCreating(true)}>+ New event type</Button>
+        <div><h1>Event types</h1><p>Create events to share for people to book on your calendar.</p></div>
+        <Button onClick={() => setCreating(true)}><Icon name="plus" size={15} /> New event type</Button>
       </div>
       <div className="row between wrap gap mb">
-        <div className="row gap"><Avatar name={me.user.name} color={me.user.avatar_color} src={me.user.avatar_url} size={36} /><div><div className="strong">{me.user.name}</div><a className="small link" href={`/${me.user.slug}`} target="_blank" rel="noreferrer">{absUrl(`/${me.user.slug}`)}</a></div></div>
-        <input className="search" placeholder="Search event types" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="row gap">
+          <Avatar name={me.user.name} color={me.user.avatar_color} src={me.user.avatar_url} size={36} />
+          <div>
+            <div className="strong small">{me.user.name}</div>
+            <a className="link xsmall" href={`/${me.user.slug}`} target="_blank" rel="noreferrer">{absUrl(`/${me.user.slug}`)}</a>
+          </div>
+        </div>
+        <input className="search" placeholder="Search event types…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search event types" />
       </div>
       <div className="et-grid">
         {list.map((et, idx) => (
@@ -49,23 +56,23 @@ export default function EventTypes() {
             <div className="et-top">
               <Toggle checked={et.active} onChange={(v) => toggle(et, v)} />
               <div className="et-menu-wrap">
-                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); setMenu(menu === et.id ? null : et.id); }} aria-label="More">⋯</button>
+                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); setMenu(menu === et.id ? null : et.id); }} aria-label="More actions" aria-haspopup="menu"><Icon name="more" size={17} /></button>
                 {menu === et.id && (
-                  <div className="menu" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => nav(`/app/event-types/${et.id}`)}>✏️ Edit</button>
-                    <button onClick={() => { setShare(et); setMenu(null); }}>🔗 Share / embed</button>
-                    <button onClick={() => nav(`/app/event-types/${et.id}/troubleshoot`)}>🔍 Troubleshoot availability</button>
-                    <button onClick={async () => { await api(`/event-types/${et.id}/duplicate`, { method: 'POST' }); reload(); toast('Duplicated'); setMenu(null); }}>📄 Duplicate</button>
-                    <button onClick={() => { move(idx, -1); setMenu(null); }} disabled={idx === 0}>⬆ Move up</button>
-                    <button onClick={() => { move(idx, 1); setMenu(null); }} disabled={idx === list.length - 1}>⬇ Move down</button>
-                    <button className="danger" onClick={() => { setDel(et); setMenu(null); }}>🗑 Delete</button>
+                  <div className="menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => nav(`/app/event-types/${et.id}`)}><Icon name="pencil" size={15} /> Edit</button>
+                    <button onClick={() => { setShare(et); setMenu(null); }}><Icon name="link" size={15} /> Share / embed</button>
+                    <button onClick={() => nav(`/app/event-types/${et.id}/troubleshoot`)}><Icon name="search" size={15} /> Troubleshoot availability</button>
+                    <button onClick={async () => { await api(`/event-types/${et.id}/duplicate`, { method: 'POST' }); reload(); toast('Duplicated'); setMenu(null); }}><Icon name="duplicate" size={15} /> Duplicate</button>
+                    <button onClick={() => { move(idx, -1); setMenu(null); }} disabled={idx === 0}><Icon name="arrow-up" size={15} /> Move up</button>
+                    <button onClick={() => { move(idx, 1); setMenu(null); }} disabled={idx === list.length - 1}><Icon name="arrow-down" size={15} /> Move down</button>
+                    <button className="danger" onClick={() => { setDel(et); setMenu(null); }}><Icon name="trash" size={15} /> Delete</button>
                   </div>
                 )}
               </div>
             </div>
             <Link to={`/app/event-types/${et.id}`} className="et-body">
               <h3>{et.name}</h3>
-              <div className="small muted">{et.durations.map(durLabel).join(' / ')} · {KIND_LABELS[et.kind]}{et.locations?.[0] ? ` · ${LOCATION_TYPES[et.locations[0].type]?.icon || ''}` : ''}</div>
+              <div className="small muted">{et.durations.map(durLabel).join(' / ')} · {KIND_LABELS[et.kind]}</div>
               <div className="row gap-sm mt-sm wrap">
                 {et.secret && <Badge color="purple">Secret</Badge>}
                 {et.settings?.price_cents > 0 && <Badge color="green">Paid</Badge>}
@@ -101,7 +108,7 @@ export default function EventTypes() {
             <button key={k} className="kind-option" onClick={() => create(k)}>
               <div className="strong">{KIND_LABELS[k]}</div>
               <div className="small muted">{KIND_DESCRIPTIONS[k]}</div>
-              <span className="arrow">›</span>
+              <span className="arrow"><Icon name="chevron-right" size={18} /></span>
             </button>
           ))}
         </div>

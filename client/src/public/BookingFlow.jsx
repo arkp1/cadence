@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DateTime } from 'luxon';
 import { useNavigate } from 'react-router-dom';
-import { api, browserTz, fmtTime, fmtDate, durLabel, fmtMoney, LOCATION_TYPES, locationLabel, isEmbed, postToParent, KIND_LABELS } from '../lib.js';
+import { api, browserTz, fmtTime, fmtDate, durLabel, fmtMoney, locationLabel, locationIcon, isEmbed, postToParent, KIND_LABELS } from '../lib.js';
 import { Avatar, Button, Field, TimezoneSelect, Spinner } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 const WEEK = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -20,6 +21,8 @@ export function PublicShell({ owner, children, wide }) {
 
 export function EventSummary({ event, duration, reschedule, selected, tz, timeFormat, children }) {
   const st = event.settings || {};
+  const locType = event.locations?.[0]?.type;
+  const locIcon = locationIcon(locType);
   return (
     <div className="event-summary">
       <div className="host-row">
@@ -30,14 +33,14 @@ export function EventSummary({ event, duration, reschedule, selected, tz, timeFo
       <div className="muted host-name">{event.kind === 'round_robin' ? `${event.owner?.name} · Team` : event.hosts?.length > 1 ? event.hosts.map((h) => h.name).join(', ') : event.owner?.name}</div>
       <h1 className="event-title">{event.name}</h1>
       <ul className="meta-list">
-        <li>⏱ {durLabel(duration || event.duration)}</li>
-        {event.locations?.length === 1 && <li>{LOCATION_TYPES[event.locations[0].type]?.icon} {locationLabel(event.locations[0])}{event.locations[0].value ? ` — ${event.locations[0].value}` : ''}</li>}
-        {event.locations?.length > 1 && <li>📍 {event.locations.length} location options</li>}
-        {['jitsi', 'zoom', 'google_meet', 'teams'].includes(event.locations?.[0]?.type) && <li className="muted small">Web conferencing details provided upon confirmation.</li>}
-        {st.price_cents > 0 && <li>💳 {fmtMoney(st.price_cents, st.currency)}</li>}
-        {event.kind !== 'one_on_one' && <li>👥 {KIND_LABELS[event.kind]}{event.kind === 'group' && st.max_invitees ? ` · up to ${st.max_invitees} invitees` : ''}</li>}
-        {selected && <li className="strong">🗓 {fmtTime(selected, tz, timeFormat)} – {fmtTime(DateTime.fromISO(selected).plus({ minutes: duration }).toISO(), tz, timeFormat)}, {fmtDate(selected, tz)}</li>}
-        {selected && <li>🌐 {tz.replace(/_/g, ' ')}</li>}
+        <li><Icon name="clock" size={16} /><span>{durLabel(duration || event.duration)}</span></li>
+        {event.locations?.length === 1 && <li><Icon name={locIcon} size={16} /><span>{locationLabel(event.locations[0])}{event.locations[0].value ? ` — ${event.locations[0].value}` : ''}</span></li>}
+        {event.locations?.length > 1 && <li><Icon name="map-pin" size={16} /><span>{event.locations.length} location options</span></li>}
+        {['jitsi', 'zoom', 'google_meet', 'teams'].includes(event.locations?.[0]?.type) && <li className="muted small"><Icon name="info" size={15} /><span>Web conferencing details provided upon confirmation.</span></li>}
+        {st.price_cents > 0 && <li><Icon name="credit-card" size={16} /><span>{fmtMoney(st.price_cents, st.currency)}</span></li>}
+        {event.kind !== 'one_on_one' && <li><Icon name="users" size={16} /><span>{KIND_LABELS[event.kind]}{event.kind === 'group' && st.max_invitees ? ` · up to ${st.max_invitees} invitees` : ''}</span></li>}
+        {selected && <li className="strong"><Icon name="calendar-check" size={16} /><span>{fmtTime(selected, tz, timeFormat)} – {fmtTime(DateTime.fromISO(selected).plus({ minutes: duration }).toISO(), tz, timeFormat)}, {fmtDate(selected, tz)}</span></li>}
+        {selected && <li><Icon name="globe" size={16} /><span>{tz.replace(/_/g, ' ')}</span></li>}
       </ul>
       {reschedule && (
         <div className="former-time">
@@ -106,7 +109,7 @@ export default function BookingFlow({ event, linkToken, reschedule, routing }) {
     return (
       <div className="booking-layout form-step">
         <aside className="booking-left">
-          <button className="back-btn abs step-back" onClick={() => setStep('pick')} aria-label="Go to previous page">←</button>
+          <button className="back-btn abs step-back" onClick={() => setStep('pick')} aria-label="Go to previous page"><Icon name="arrow-left" size={18} /></button>
           <EventSummary event={event} duration={duration} reschedule={reschedule} selected={slot.start} tz={tz} timeFormat={timeFormat} />
         </aside>
         <section className="booking-right">
@@ -144,9 +147,9 @@ export default function BookingFlow({ event, linkToken, reschedule, routing }) {
         <div className={`picker ${date ? 'with-times' : ''}`}>
           <div className="calendar">
             <div className="cal-head">
-              <button className="cal-nav" disabled={month <= today.startOf('month')} onClick={() => { setMonth(month.minus({ months: 1 })); setDate(null); }} aria-label="Go to previous month">‹</button>
+              <button className="cal-nav" disabled={month <= today.startOf('month')} onClick={() => { setMonth(month.minus({ months: 1 })); setDate(null); }} aria-label="Go to previous month"><Icon name="chevron-left" size={19} /></button>
               <div className="cal-month" aria-live="polite">{month.toFormat('LLLL yyyy')}</div>
-              <button className="cal-nav" onClick={() => { setMonth(month.plus({ months: 1 })); setDate(null); autoAdvanced.current = 99; }} aria-label="Go to next month">›</button>
+              <button className="cal-nav" onClick={() => { setMonth(month.plus({ months: 1 })); setDate(null); autoAdvanced.current = 99; }} aria-label="Go to next month"><Icon name="chevron-right" size={19} /></button>
             </div>
             <div className="cal-grid">
               {WEEK.map((w) => <div key={w} className="cal-wd">{w}</div>)}
@@ -259,7 +262,7 @@ function BookingForm({ event, slot, duration, tz, linkToken, reschedule, routing
             <>
               <span className="field-label">Guest Email(s)</span>
               <div className="guest-box">
-                {guests.map((g) => <span key={g} className="guest-chip">{g}<button type="button" onClick={() => setGuests(guests.filter((x) => x !== g))}>✕</button></span>)}
+                {guests.map((g) => <span key={g} className="guest-chip">{g}<button type="button" onClick={() => setGuests(guests.filter((x) => x !== g))} aria-label={`Remove ${g}`}><Icon name="x" size={10} /></button></span>)}
                 <input value={guestInput} placeholder="name@example.com" onChange={(e) => setGuestInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addGuest(); } }} onBlur={addGuest} />
               </div>
               <span className="field-hint">Notify up to {st.max_guests || 10} additional guests of the scheduled event.</span>
@@ -270,7 +273,7 @@ function BookingForm({ event, slot, duration, tz, linkToken, reschedule, routing
       {!reschedule && event.locations?.length > 1 && (
         <Field label="Location *">
           <div className="opt-list">
-            {event.locations.map((l, i) => <label key={i} className="opt"><input type="radio" checked={locIdx === i} onChange={() => setLocIdx(i)} /> {LOCATION_TYPES[l.type]?.icon} {locationLabel(l)}{l.value ? ` — ${l.value}` : ''}</label>)}
+            {event.locations.map((l, i) => <label key={i} className="opt"><input type="radio" checked={locIdx === i} onChange={() => setLocIdx(i)} /> <Icon name={locationIcon(l.type)} size={15} /> {locationLabel(l)}{l.value ? ` — ${l.value}` : ''}</label>)}
           </div>
         </Field>
       )}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { api, absUrl, ts } from '../lib.js';
 import { Button, Field, Spinner, useAsync, useToast, Empty, Badge, CopyButton, Toggle, Confirm, Tabs } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 const QT = { name: 'Name', email: 'Email', text: 'Short text', textarea: 'Long text', select: 'Dropdown', radio: 'Radio', phone: 'Phone', number: 'Number' };
 const OPS = { equals: 'is', not_equals: 'is not', contains: 'contains', any_of: 'is any of (comma list)', gte: '≥', lte: '≤', is_empty: 'is empty' };
@@ -20,7 +21,7 @@ export default function RoutingForms() {
         <div><h1>Routing forms</h1><p className="muted">Qualify and route invitees to the right event type, page or message based on their answers.</p></div>
         <Button onClick={async () => { const r = await api('/routing-forms', { method: 'POST', body: { name: 'New routing form' } }); setEdit(r.form.id); }}>+ New routing form</Button>
       </div>
-      {!data.forms.length ? <div className="card"><Empty icon="🧭" title="No routing forms yet" /></div> : (
+      {!data.forms.length ? <div className="card"><Empty icon="route" title="No routing forms yet" /></div> : (
         <div className="card">
           <table className="table">
             <thead><tr><th>Name</th><th>Questions</th><th>Rules</th><th>Submissions</th><th>Status</th><th></th></tr></thead>
@@ -29,7 +30,7 @@ export default function RoutingForms() {
                 <td><button className="link strong" onClick={() => setEdit(f.id)}>{f.name}</button></td>
                 <td>{f.questions.length}</td><td>{f.rules.length}</td><td>{f.submissions}</td>
                 <td>{f.active ? <Badge color="green">Active</Badge> : <Badge>Off</Badge>}</td>
-                <td className="row gap-sm right"><CopyButton text={absUrl(f.path)} /><a className="btn btn-ghost btn-sm" href={f.path} target="_blank" rel="noreferrer">Open ↗</a><Button size="sm" variant="danger-outline" onClick={() => setDel(f)}>Delete</Button></td>
+                <td className="row gap-sm right"><CopyButton text={absUrl(f.path)} /><a className="btn btn-ghost btn-sm" href={f.path} target="_blank" rel="noreferrer">Open <Icon name="external" size={13} /></a><Button size="sm" variant="danger-outline" onClick={() => setDel(f)}>Delete</Button></td>
               </tr>
             ))}</tbody>
           </table>
@@ -68,8 +69,8 @@ function FormEditor({ id, ets, onBack }) {
   return (
     <div>
       <div className="page-head">
-        <div className="row gap"><button className="icon-btn" onClick={onBack}>←</button><div><div className="small muted">Routing form</div><h1>{f.name}</h1></div></div>
-        <div className="row gap"><CopyButton text={absUrl(f.path)} /><a className="btn btn-ghost" href={f.path} target="_blank" rel="noreferrer">Preview ↗</a><Button onClick={save} loading={saving}>Save</Button></div>
+        <div className="row gap"><button className="icon-btn" onClick={onBack} aria-label="Back"><Icon name="arrow-left" size={17} /></button><div><div className="small muted">Routing form</div><h1>{f.name}</h1></div></div>
+        <div className="row gap"><CopyButton text={absUrl(f.path)} /><a className="btn btn-ghost" href={f.path} target="_blank" rel="noreferrer">Preview <Icon name="external" size={13} /></a><Button onClick={save} loading={saving}>Save</Button></div>
       </div>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: 'questions', label: 'Questions' }, { value: 'routing', label: 'Routing logic' }, { value: 'subs', label: 'Submissions', count: f.submissions }]} />
       {tab === 'questions' && (
@@ -82,7 +83,7 @@ function FormEditor({ id, ets, onBack }) {
                 <input value={q.label} placeholder="Question" onChange={(e) => { const a = [...f.questions]; a[i] = { ...q, label: e.target.value }; up({ questions: a }); }} />
                 <select value={q.type} onChange={(e) => { const a = [...f.questions]; a[i] = { ...q, type: e.target.value }; up({ questions: a }); }}>{Object.entries(QT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                 <Toggle checked={q.required} onChange={(v) => { const a = [...f.questions]; a[i] = { ...q, required: v }; up({ questions: a }); }} label="Required" />
-                <button className="icon-btn" onClick={() => up({ questions: f.questions.filter((_, j) => j !== i) })}>✕</button>
+                <button className="icon-btn" onClick={() => up({ questions: f.questions.filter((_, j) => j !== i) })} aria-label="Remove question"><Icon name="x" size={14} /></button>
               </div>
               {['select', 'radio'].includes(q.type) && <input className="mt-sm" placeholder="Options, comma separated" defaultValue={(q.options || []).join(', ')} onBlur={(e) => { const a = [...f.questions]; a[i] = { ...q, options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) }; up({ questions: a }); }} />}
               <div className="small muted mt-sm">ID: <code>{q.id}</code></div>
@@ -98,7 +99,7 @@ function FormEditor({ id, ets, onBack }) {
           {f.rules.map((r, i) => (
             <div key={i} className="rule">
               <div className="row between"><input className="rule-name" value={r.name || ''} placeholder={`Rule ${i + 1}`} onChange={(e) => { const a = [...f.rules]; a[i] = { ...r, name: e.target.value }; up({ rules: a }); }} />
-                <button className="icon-btn" onClick={() => up({ rules: f.rules.filter((_, j) => j !== i) })}>✕</button></div>
+                <button className="icon-btn" onClick={() => up({ rules: f.rules.filter((_, j) => j !== i) })} aria-label="Remove rule"><Icon name="x" size={14} /></button></div>
               <div className="row gap-sm small">If <select value={r.match} onChange={(e) => { const a = [...f.rules]; a[i] = { ...r, match: e.target.value }; up({ rules: a }); }}><option value="all">all</option><option value="any">any</option></select> of these conditions match:</div>
               {(r.conditions || []).map((c, k) => (
                 <div key={k} className="row gap-sm wrap cond">
@@ -107,7 +108,7 @@ function FormEditor({ id, ets, onBack }) {
                   {c.op !== 'is_empty' && (() => { const q = f.questions.find((x) => x.id === c.question_id); return q?.options?.length && ['equals', 'not_equals'].includes(c.op)
                     ? <select value={c.value} onChange={(e) => { const a = structuredClone(f.rules); a[i].conditions[k].value = e.target.value; up({ rules: a }); }}><option value="">Choose…</option>{q.options.map((o) => <option key={o}>{o}</option>)}</select>
                     : <input value={c.value} onChange={(e) => { const a = structuredClone(f.rules); a[i].conditions[k].value = e.target.value; up({ rules: a }); }} />; })()}
-                  <button className="icon-btn" onClick={() => { const a = structuredClone(f.rules); a[i].conditions.splice(k, 1); up({ rules: a }); }}>✕</button>
+                  <button className="icon-btn" onClick={() => { const a = structuredClone(f.rules); a[i].conditions.splice(k, 1); up({ rules: a }); }} aria-label="Remove condition"><Icon name="x" size={14} /></button>
                 </div>
               ))}
               <Button size="sm" variant="ghost" onClick={() => { const a = structuredClone(f.rules); a[i].conditions = [...(a[i].conditions || []), { question_id: choiceQs[0]?.id, op: 'equals', value: '' }]; up({ rules: a }); }}>+ Condition</Button>
@@ -121,13 +122,13 @@ function FormEditor({ id, ets, onBack }) {
       )}
       {tab === 'subs' && (
         <div className="card">
-          {!subs ? <Spinner center /> : !subs.length ? <Empty icon="📭" title="No submissions yet" /> : (
+          {!subs ? <Spinner center /> : !subs.length ? <Empty icon="mail" title="No submissions yet" /> : (
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Submitted</th>{f.questions.map((q) => <th key={q.id}>{q.label}</th>)}<th>Routed to</th><th>Booked</th></tr></thead>
               <tbody>{subs.map((s) => (
                 <tr key={s.id}><td className="small">{ts(s.created_at).toLocal().toFormat('LLL d, h:mma')}</td>
                   {f.questions.map((q) => <td key={q.id}>{String(s.answers.find((a) => a.id === q.id)?.value ?? '')}</td>)}
-                  <td className="small">{s.result.type === 'event_type' ? `📅 ${ets.find((e) => e.id === s.result.event_type_id)?.name || 'Event'}` : s.result.type === 'url' ? `🔗 ${s.result.url}` : '💬 Message'}{s.result.matched_rule ? '' : ' (fallback)'}</td>
+                  <td className="small">{s.result.type === 'event_type' ? <span className="row gap-sm"><Icon name="calendar" size={13} />{ets.find((e) => e.id === s.result.event_type_id)?.name || 'Event'}</span> : s.result.type === 'url' ? <span className="row gap-sm"><Icon name="link" size={13} />{s.result.url}</span> : <span className="row gap-sm"><Icon name="mail" size={13} />Message</span>}{s.result.matched_rule ? '' : ' (fallback)'}</td>
                   <td>{s.booking_uid ? <Badge color="green">Yes</Badge> : <Badge>No</Badge>}</td></tr>
               ))}</tbody>
             </table></div>

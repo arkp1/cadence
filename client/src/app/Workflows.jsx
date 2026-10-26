@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../lib.js';
 import { Button, Field, Modal, Spinner, useAsync, useToast, Empty, Toggle, Confirm, Badge } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 const TRIGGERS = { booked: 'When event is booked', before_start: 'Before event starts', after_end: 'After event ends', canceled: 'When event is canceled' };
 const ACTIONS = { email_invitee: 'Send email to invitee', email_host: 'Send email to host' };
@@ -26,14 +27,14 @@ export default function Workflows() {
       </div>
       <div className="small strong mb-sm">Start from a template</div>
       <div className="tpl-row">{TEMPLATES.map((t) => <button key={t.name} className="tpl" onClick={() => setEdit({ ...t, event_type_ids: [], active: true })}><div className="strong">{t.name}</div><div className="small muted">{TRIGGERS[t.trigger]} · {ACTIONS[t.action]}</div></button>)}</div>
-      {!data.workflows.length ? <div className="card"><Empty icon="⚡" title="No workflows yet" /></div> : (
+      {!data.workflows.length ? <div className="card"><Empty icon="bolt" title="No workflows yet" /></div> : (
         <div className="wf-grid">
           {data.workflows.map((w) => (
             <div key={w.id} className={`card wf ${w.active ? '' : 'off'}`}>
               <div className="row between"><div className="strong">{w.name}</div><Toggle checked={w.active} onChange={async (v) => { await api(`/workflows/${w.id}`, { method: 'PATCH', body: { active: v } }); reload(); toast(v ? 'Workflow on' : 'Workflow off'); }} /></div>
               <div className="wf-steps">
-                <div className="wf-step">⏱ {w.trigger === 'before_start' ? `${offsetLabel(w.offset_minutes)} before event starts` : w.trigger === 'after_end' ? `${offsetLabel(w.offset_minutes)} after event ends` : TRIGGERS[w.trigger]}</div>
-                <div className="wf-step">✉️ {ACTIONS[w.action]}</div>
+                <div className="wf-step"><Icon name="clock" size={14} /> {w.trigger === 'before_start' ? `${offsetLabel(w.offset_minutes)} before event starts` : w.trigger === 'after_end' ? `${offsetLabel(w.offset_minutes)} after event ends` : TRIGGERS[w.trigger]}</div>
+                <div className="wf-step"><Icon name="mail" size={14} /> {ACTIONS[w.action]}</div>
               </div>
               <div className="small muted">{w.event_type_ids.length ? `${w.event_type_ids.length} event type(s)` : 'All event types'}</div>
               <div className="row gap-sm mt-sm"><Button size="sm" variant="secondary" onClick={() => setEdit(w)}>Edit</Button><Button size="sm" variant="danger-outline" onClick={() => setDel(w)}>Delete</Button></div>

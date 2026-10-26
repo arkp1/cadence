@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { timezones, copy as copyText, initials } from '../lib.js';
+import { Icon, hasIcon } from './icons.jsx';
 
 // ---------- Toasts ----------
 const ToastCtx = createContext(() => {});
@@ -8,48 +9,86 @@ export function ToastProvider({ children }) {
   const push = useCallback((msg, type = 'ok') => {
     const id = Math.random();
     setItems((x) => [...x, { id, msg, type }]);
-    setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), 3200);
+    setTimeout(() => setItems((x) => x.filter((i) => i.id !== id)), 3400);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="toasts">{items.map((t) => <div key={t.id} className={`toast toast-${t.type}`}>{t.msg}</div>)}</div>
+      <div className="toasts" role="status" aria-live="polite">
+        {items.map((t) => (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            {t.type === 'err' ? <Icon name="alert-triangle" size={15} /> : <Icon name="check" size={15} />} {t.msg}
+          </div>
+        ))}
+      </div>
     </ToastCtx.Provider>
   );
 }
 export const useToast = () => useContext(ToastCtx);
 
 // ---------- Basic ----------
-export function Button({ variant = 'primary', size, className = '', loading, children, ...p }) {
-  return <button className={`btn btn-${variant} ${size ? `btn-${size}` : ''} ${className}`} disabled={loading || p.disabled} {...p}>{loading ? <span className="spinner" /> : null}{children}</button>;
+export function Button({ variant = 'primary', size, type = 'button', className = '', loading, children, ...p }) {
+  return (
+    <button type={type} className={`btn btn-${variant} ${size ? `btn-${size}` : ''} ${className}`} disabled={loading || p.disabled} aria-busy={loading || undefined} {...p}>
+      {loading ? <span className="spinner" aria-hidden="true" /> : null}
+      {children}
+    </button>
+  );
 }
 export function Field({ label, hint, error, children, className = '' }) {
-  return <label className={`field ${className}`}>{label && <span className="field-label">{label}</span>}{children}{hint && <span className="field-hint">{hint}</span>}{error && <span className="field-error">{error}</span>}</label>;
+  return (
+    <label className={`field ${className}`}>
+      {label && <span className="field-label">{label}</span>}
+      {children}
+      {hint && <span className="field-hint">{hint}</span>}
+      {error && <span className="field-error">{error}</span>}
+    </label>
+  );
 }
 export function Toggle({ checked, onChange, label, disabled }) {
   return (
     <label className={`toggle ${disabled ? 'disabled' : ''}`} onClick={(e) => e.stopPropagation()}>
       <input type="checkbox" checked={!!checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span className="toggle-track"><span className="toggle-thumb" /></span>
+      <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
       {label && <span className="toggle-label">{label}</span>}
     </label>
   );
 }
 export function Avatar({ name, color = '#4f46e5', size = 40, src }) {
   const [broken, setBroken] = useState(false);
-  if (src && !broken) return <img className="avatar-img" src={src} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setBroken(true)} />;
-  return <div className="avatar" style={{ background: color, width: size, height: size, fontSize: size * 0.38 }}>{initials(name)}</div>;
+  if (src && !broken) {
+    return (
+      <img
+        className="avatar-img" src={src} alt={name || ''} width={size} height={size}
+        loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBroken(true)}
+      />
+    );
+  }
+  return <div className="avatar" style={{ background: color, width: size, height: size, fontSize: size * 0.38 }} aria-hidden={name ? undefined : true}>{initials(name)}</div>;
 }
 export function Modal({ open, onClose, title, children, footer, width = 560 }) {
+  const closeRef = useRef(null);
   useEffect(() => {
-    if (!open) return; const h = (e) => e.key === 'Escape' && onClose?.();
-    document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
+    if (!open) return undefined;
+    const h = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', h);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const t = setTimeout(() => closeRef.current?.focus(), 30);
+    return () => {
+      document.removeEventListener('keydown', h);
+      document.body.style.overflow = prev;
+      clearTimeout(t);
+    };
   }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="modal" style={{ maxWidth: width }}>
-        <div className="modal-head"><h3>{title}</h3><button className="icon-btn" onClick={onClose} aria-label="Close">✕</button></div>
+      <div className="modal" style={{ maxWidth: width }} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Dialog'}>
+        <div className="modal-head">
+          <h3>{title}</h3>
+          <button ref={closeRef} type="button" className="icon-btn" onClick={onClose} aria-label="Close dialog"><Icon name="x" size={17} /></button>
+        </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
@@ -65,17 +104,42 @@ export function Confirm({ open, title, message, confirmLabel = 'Confirm', danger
     </Modal>
   );
 }
-export function CopyButton({ text, label = 'Copy link', variant = 'secondary', size = 'sm' }) {
+export function CopyButton({ text, label = 'Copy', variant = 'secondary', size = 'sm' }) {
   const [done, setDone] = useState(false);
-  return <Button variant={variant} size={size} onClick={(e) => { e.stopPropagation(); copyText(text); setDone(true); setTimeout(() => setDone(false), 1500); }}>{done ? '✓ Copied' : label}</Button>;
+  return (
+    <Button variant={variant} size={size} onClick={(e) => { e.stopPropagation(); copyText(text); setDone(true); setTimeout(() => setDone(false), 1600); }} aria-label={done ? 'Copied' : label}>
+      <Icon name={done ? 'check' : 'copy'} size={14} />
+      {done ? 'Copied' : label}
+    </Button>
+  );
 }
 export function Empty({ icon = '🗓️', title, children, action }) {
-  return <div className="empty"><div className="empty-icon">{icon}</div><h3>{title}</h3>{children && <p className="muted">{children}</p>}{action}</div>;
+  return (
+    <div className="empty">
+      <div className="empty-icon" aria-hidden="true">{hasIcon(icon) ? <Icon name={icon} size={22} /> : icon}</div>
+      <h3>{title}</h3>
+      {children && <p className="muted small">{children}</p>}
+      {action}
+    </div>
+  );
 }
 export function Tabs({ tabs, value, onChange }) {
-  return <div className="tabs">{tabs.map((t) => <button key={t.value} className={`tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>{t.label}{t.count != null && <span className="tab-count">{t.count}</span>}</button>)}</div>;
+  return (
+    <div className="tabs" role="tablist">
+      {tabs.map((t) => (
+        <button key={t.value} type="button" role="tab" aria-selected={value === t.value}
+          className={`tab ${value === t.value ? 'active' : ''}`} onClick={() => onChange(t.value)}>
+          {t.label}
+          {t.count != null && <span className="tab-count">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
 }
-export function Spinner({ center }) { return center ? <div className="center-pad"><span className="spinner spinner-lg" /></div> : <span className="spinner" />; }
+export function Spinner({ center }) {
+  if (center) return <div className="center-pad"><span className="spinner spinner-lg" role="status" aria-label="Loading" /></div>;
+  return <span className="spinner" role="status" aria-label="Loading" />;
+}
 export function Badge({ children, color = 'gray' }) { return <span className={`badge badge-${color}`}>{children}</span>; }
 
 // ---------- Time zone picker ----------
@@ -84,27 +148,33 @@ export function TimezoneSelect({ value, onChange, compact }) {
   const [q, setQ] = useState('');
   const ref = useRef();
   const all = useMemo(() => timezones(), []);
-  const list = all.filter((t) => !q || t.label.toLowerCase().includes(q.toLowerCase()) || t.short.includes(q));
+  const query = q.toLowerCase();
+  const list = all.filter((t) => !q || t.label.toLowerCase().includes(query) || t.short.includes(q));
   useEffect(() => {
     const h = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
   const cur = all.find((t) => t.zone === value);
   return (
     <div className={`tz-select ${compact ? 'compact' : ''}`} ref={ref}>
-      <button type="button" className="tz-btn" onClick={() => setOpen(!open)} aria-label="Timezone dropdown button">
-        🌐 <span>{cur ? `${cur.label} (UTC${cur.short})` : value}</span> <span className="caret">▾</span>
+      <button type="button" className="tz-btn" onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}>
+        <Icon name="globe" size={15} />
+        <span>{cur ? `${cur.label} (UTC${cur.short})` : value}</span>
+        <Icon name="chevron-down" size={13} />
       </button>
       {open && (
         <div className="tz-pop">
-          <input autoFocus placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <div className="tz-list">
+          <input autoFocus placeholder="Search time zones…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search time zones" />
+          <div className="tz-list" role="listbox">
             {list.map((t) => (
-              <button type="button" key={t.zone} className={`tz-item ${t.zone === value ? 'active' : ''}`} onClick={() => { onChange(t.zone); setOpen(false); setQ(''); }}>
+              <button type="button" key={t.zone} role="option" aria-selected={t.zone === value}
+                className={`tz-item ${t.zone === value ? 'active' : ''}`}
+                onClick={() => { onChange(t.zone); setOpen(false); setQ(''); }}>
                 <span>{t.label}</span><span className="muted">UTC{t.short}</span>
               </button>
             ))}
-            {!list.length && <div className="muted pad">No matches</div>}
+            {!list.length && <div className="muted pad small">No matches</div>}
           </div>
         </div>
       )}

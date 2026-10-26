@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { api, absUrl, fmtTime, fmtDate, durLabel, LOCATION_TYPES } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, Field, Modal, Spinner, useAsync, useToast, Empty, Badge, CopyButton, Toggle, Confirm } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 export default function Polls() {
   const { me } = useAuth();
@@ -19,7 +20,7 @@ export default function Polls() {
         <div><h1>Meeting polls</h1><p className="muted">Propose times, let invitees vote, then book the time that works best for everyone.</p></div>
         <Button onClick={() => setCreating(true)}>+ New meeting poll</Button>
       </div>
-      {!data.polls.length ? <div className="card"><Empty icon="🗳" title="No meeting polls yet" action={<Button onClick={() => setCreating(true)}>Create a poll</Button>}>Polls are great for finding a time across several people.</Empty></div> : (
+      {!data.polls.length ? <div className="card"><Empty icon="poll" title="No meeting polls yet" action={<Button onClick={() => setCreating(true)}>Create a poll</Button>}>Polls are great for finding a time across several people.</Empty></div> : (
         <div className="stack">
           {data.polls.map((p) => {
             const counts = Object.fromEntries(p.options.map((o) => [o.id, p.votes.filter((v) => v.choices.includes(o.id)).length]));
@@ -28,7 +29,7 @@ export default function Polls() {
               <div key={p.id} className="card">
                 <button className="poll-row" onClick={() => setOpen(open === p.id ? null : p.id)}>
                   <div><div className="strong">{p.title}</div><div className="small muted">{durLabel(p.duration)} · {p.options.length} options · {p.votes.length} participant{p.votes.length === 1 ? '' : 's'}</div></div>
-                  <div className="row gap-sm">{p.status === 'open' ? <Badge color="green">Open</Badge> : p.status === 'booked' ? <Badge color="blue">Booked</Badge> : <Badge>Closed</Badge>}{p.reserve_times ? <Badge color="purple">Times reserved</Badge> : null}<span className="caret">{open === p.id ? '▾' : '▸'}</span></div>
+                  <div className="row gap-sm">{p.status === 'open' ? <Badge color="green">Open</Badge> : p.status === 'booked' ? <Badge color="blue">Booked</Badge> : <Badge>Closed</Badge>}{p.reserve_times ? <Badge color="purple">Times reserved</Badge> : null}<span className="caret"><Icon name={open === p.id ? 'chevron-down' : 'chevron-right'} size={16} /></span></div>
                 </button>
                 {open === p.id && (
                   <div className="pad">
@@ -42,7 +43,7 @@ export default function Polls() {
                       <table className="table poll-table">
                         <thead><tr><th>Participant</th>{p.options.map((o) => <th key={o.id} className={counts[o.id] === best && best > 0 ? 'best' : ''}><div>{fmtDate(o.start, tz, 'ccc LLL d')}</div><div className="small">{fmtTime(o.start, tz, fmt)}</div></th>)}</tr></thead>
                         <tbody>
-                          {p.votes.map((v) => <tr key={v.id}><td><div className="strong">{v.name}</div><div className="small muted">{v.email}</div></td>{p.options.map((o) => <td key={o.id} className="center">{v.choices.includes(o.id) ? '✅' : '—'}</td>)}</tr>)}
+                          {p.votes.map((v) => <tr key={v.id}><td><div className="strong">{v.name}</div><div className="small muted">{v.email}</div></td>{p.options.map((o) => <td key={o.id} className="center">{v.choices.includes(o.id) ? <Icon name="check" size={15} className="green" /> : <span className="muted">—</span>}</td>)}</tr>)}
                           <tr className="totals"><td>Total</td>{p.options.map((o) => <td key={o.id} className="center strong">{counts[o.id]}</td>)}</tr>
                           {p.status === 'open' && <tr><td></td>{p.options.map((o) => <td key={o.id} className="center"><Button size="sm" variant={counts[o.id] === best && best > 0 ? 'primary' : 'outline'} disabled={!counts[o.id]}
                             onClick={async () => { try { await api(`/polls/${p.id}/book`, { method: 'POST', body: { option_id: o.id } }); toast('Meeting booked — invites sent'); reload(); } catch (e) { toast(e.message, 'err'); } }}>Book</Button></td>)}</tr>}
@@ -84,7 +85,7 @@ function CreatePoll({ tz, onClose, onCreated }) {
         {LOCATION_TYPES[f.location.type]?.needsValue && <Field label="Location details"><input value={f.location.value || ''} onChange={(e) => setF({ ...f, location: { ...f.location, value: e.target.value } })} placeholder={LOCATION_TYPES[f.location.type].placeholder} /></Field>}
         <div className="small strong">Time options ({tz})</div>
         {f.options.map((o, i) => (
-          <div key={i} className="row gap-sm"><input type="datetime-local" value={o} onChange={(e) => { const a = [...f.options]; a[i] = e.target.value; setF({ ...f, options: a }); }} /><button className="icon-btn" onClick={() => setF({ ...f, options: f.options.filter((_, j) => j !== i) })}>✕</button></div>
+          <div key={i} className="row gap-sm"><input type="datetime-local" value={o} onChange={(e) => { const a = [...f.options]; a[i] = e.target.value; setF({ ...f, options: a }); }} /><button className="icon-btn" onClick={() => setF({ ...f, options: f.options.filter((_, j) => j !== i) })} aria-label="Remove option"><Icon name="x" size={14} /></button></div>
         ))}
         <Button size="sm" variant="outline" onClick={() => setF({ ...f, options: [...f.options, DateTime.fromISO(f.options[f.options.length - 1] || base.toISO()).plus({ days: 1 }).toFormat("yyyy-MM-dd'T'HH:mm")] })}>+ Add time option</Button>
         <Toggle checked={f.reserve_times} onChange={(v) => setF({ ...f, reserve_times: v })} label="Reserve these times on my calendar until the poll is booked (blocks other bookings)" />

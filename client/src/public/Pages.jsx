@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { DateTime } from 'luxon';
-import { api, browserTz, fmtTime, fmtDate, durLabel, googleCalUrl, outlookUrl, LOCATION_TYPES, locationLabel, isEmbed, fmtMoney } from '../lib.js';
+import { api, browserTz, fmtTime, fmtDate, durLabel, googleCalUrl, outlookUrl, locationLabel, locationIcon, isEmbed, fmtMoney, KIND_LABELS } from '../lib.js';
 import { Avatar, Button, Field, Spinner, useAsync, TimezoneSelect } from '../components/ui.jsx';
-import BookingFlow, { PublicShell, EventSummary } from './BookingFlow.jsx';
+import { Icon } from '../components/icons.jsx';
+import BookingFlow, { PublicShell } from './BookingFlow.jsx';
 
 function NotFound({ title = 'Page not found', message }) {
   return <PublicShell><div className="center-pad"><h2>{title}</h2><p className="muted">{message || 'The link may be incorrect or no longer available.'}</p><Link className="link" to="/">Go to Cadence</Link></div></PublicShell>;
@@ -26,8 +27,8 @@ export function ProfilePage() {
         {event_types.map((e) => (
           <Link key={e.id} to={`/${slug}/${e.slug}${window.location.search}`} className="profile-event">
             <span className="dot" style={{ background: e.color }} />
-            <div><div className="strong">{e.name}</div><div className="small muted">{e.durations.map(durLabel).join(' / ')}{e.kind !== 'one_on_one' ? ` · ${e.kind.replace('_', ' ')}` : ''}</div></div>
-            <span className="arrow">›</span>
+            <div><div className="strong">{e.name}</div><div className="small muted">{e.durations.map(durLabel).join(' / ')}{e.kind !== 'one_on_one' ? ` · ${KIND_LABELS[e.kind] || e.kind}` : ''}</div></div>
+            <span className="arrow"><Icon name="chevron-right" size={18} /></span>
           </Link>
         ))}
         {!event_types.length && <p className="muted center">No event types are available right now.</p>}
@@ -46,7 +47,7 @@ export function EventPage() {
   if (!ev.active) return <NotFound title="This event is currently unavailable" message="The host has turned this event type off." />;
   return (
     <PublicShell owner={ev.owner}>
-      {!isEmbed() && !ev.secret && <Link to={`/${slug}`} className="back-btn abs" aria-label="Go to previous page">←</Link>}
+      {!isEmbed() && !ev.secret && <Link to={`/${slug}`} className="back-btn abs" aria-label="Go to previous page"><Icon name="arrow-left" size={18} /></Link>}
       <BookingFlow event={ev} routing={loc.state?.routing} />
     </PublicShell>
   );
@@ -82,7 +83,7 @@ function BookingStatus({ booking }) {
   return (
     <PublicShell owner={booking.owner}>
       <div className="confirm">
-        <div className="confirm-icon gray">✕</div>
+        <div className="confirm-icon gray"><Icon name="x" size={24} /></div>
         <h1>{booking.status === 'rescheduled' ? 'This event was rescheduled' : 'This event has been canceled'}</h1>
         {booking.rescheduled_to && <p><Link className="link" to={`/booking/${booking.rescheduled_to}`}>View the new time →</Link></p>}
         <DetailCard booking={booking} tz={tz} strike />
@@ -99,12 +100,12 @@ function DetailCard({ booking, tz, strike }) {
     <div className={`detail-card ${strike ? 'strike-all' : ''}`}>
       <div className="strong big">{booking.event_type?.name || 'Meeting'}</div>
       <ul className="meta-list">
-        <li>👤 {booking.hosts.map((h) => h.name).join(', ')}</li>
-        <li>🗓 {fmtTime(booking.start_utc, tz, fmt)} – {fmtTime(booking.end_utc, tz, fmt)}, {fmtDate(booking.start_utc, tz)}</li>
-        <li>🌐 {tz.replace(/_/g, ' ')}</li>
-        {booking.location?.type && <li>{LOCATION_TYPES[booking.location.type]?.icon} {locationLabel(booking.location)}{booking.location.value ? <>: {/^https?:/.test(booking.location.value) ? <a className="link" href={booking.location.value} target="_blank" rel="noreferrer">{booking.location.value}</a> : booking.location.value}</> : ''}</li>}
-        {booking.guests?.length > 0 && <li>✉️ Guests: {booking.guests.join(', ')}</li>}
-        {booking.payment_status && booking.price_cents > 0 && <li>💳 {fmtMoney(booking.price_cents, booking.currency)} · {booking.payment_status === 'paid' ? 'Paid' : booking.payment_status === 'refunded' ? 'Refunded' : 'Awaiting payment'}</li>}
+        <li><Icon name="users" size={16} /><span>{booking.hosts.map((h) => h.name).join(', ')}</span></li>
+        <li><Icon name="calendar" size={16} /><span>{fmtTime(booking.start_utc, tz, fmt)} – {fmtTime(booking.end_utc, tz, fmt)}, {fmtDate(booking.start_utc, tz)}</span></li>
+        <li><Icon name="globe" size={16} /><span>{tz.replace(/_/g, ' ')}</span></li>
+        {booking.location?.type && <li><Icon name={locationIcon(booking.location.type)} size={16} /><span>{locationLabel(booking.location)}{booking.location.value ? <>: {/^https?:/.test(booking.location.value) ? <a className="link" href={booking.location.value} target="_blank" rel="noreferrer">{booking.location.value}</a> : booking.location.value}</> : ''}</span></li>}
+        {booking.guests?.length > 0 && <li><Icon name="mail" size={16} /><span>Guests: {booking.guests.join(', ')}</span></li>}
+        {booking.payment_status && booking.price_cents > 0 && <li><Icon name="credit-card" size={16} /><span>{fmtMoney(booking.price_cents, booking.currency)} · {booking.payment_status === 'paid' ? 'Paid' : booking.payment_status === 'refunded' ? 'Refunded' : 'Awaiting payment'}</span></li>}
       </ul>
     </div>
   );
@@ -117,7 +118,7 @@ function PaymentPending({ booking, canceled }) {
     return (
       <PublicShell owner={booking.owner}>
         <div className="confirm">
-          <div className="confirm-icon gray">!</div>
+          <div className="confirm-icon gray"><Icon name="alert-triangle" size={24} /></div>
           <h1>{canceled ? 'Payment not completed' : 'Reservation expired'}</h1>
           <p className="muted">{canceled ? 'You left checkout before paying, so this time is not booked.' : 'Payment wasn\'t completed in time, so the held slot was released.'} You haven't been charged.</p>
           <DetailCard booking={booking} tz={tz} strike />
@@ -192,7 +193,7 @@ export function BookingPage({ cancelMode }) {
   return (
     <PublicShell owner={b.owner}>
       <div className="confirm">
-        <div className="confirm-icon">✓</div>
+        <div className="confirm-icon"><Icon name="check" size={26} /></div>
         <h1>{isNew ? (b.rescheduled_from ? 'Your event has been rescheduled' : 'You are scheduled') : 'Event details'}</h1>
         <p className="muted">A calendar invitation has been sent to {b.invitee_email}.</p>
         <DetailCard booking={b} tz={tz} />
@@ -231,7 +232,7 @@ export function PollPage() {
       <div className="poll">
         <div className="poll-head">
           <Avatar name={p.owner.name} color={p.owner.avatar_color} src={p.owner.avatar_url} size={44} />
-          <div><div className="muted small">{p.owner.name} · Meeting poll</div><h1>{p.title}</h1><div className="muted small">⏱ {durLabel(p.duration)}{p.location?.type ? ` · ${locationLabel(p.location)}` : ''}</div></div>
+          <div><div className="muted small">{p.owner.name} · Meeting poll</div><h1>{p.title}</h1><div className="muted small row gap-sm"><Icon name="clock" size={13} /> {durLabel(p.duration)}{p.location?.type ? ` · ${locationLabel(p.location)}` : ''}</div></div>
         </div>
         {p.description && <p>{p.description}</p>}
         {p.status !== 'open' ? (
@@ -248,7 +249,7 @@ export function PollPage() {
                 <div className="poll-date">{fmtDate(o.start, tz, 'ccc, LLL d')}</div>
                 <div className="strong">{fmtTime(o.start, tz, fmt)} – {fmtTime(DateTime.fromISO(o.start).plus({ minutes: p.duration }).toISO(), tz, fmt)}</div>
                 <div className="small muted">{counts[o.id]} vote{counts[o.id] === 1 ? '' : 's'}</div>
-                <div className="check">{on ? '✓' : ''}</div>
+                <div className="check">{on ? <Icon name="check" size={13} /> : ''}</div>
               </button>
             );
           })}
@@ -282,7 +283,7 @@ export function RoutingFormPage() {
   const f = data.form;
   const set = (id, v) => setAnswers({ ...answers, [id]: v });
   if (result) {
-    return <PublicShell owner={f.owner}><div className="confirm"><div className="confirm-icon">✓</div><h1>{f.name}</h1><p style={{ whiteSpace: 'pre-wrap' }}>{result.message || 'Thanks! Your response has been recorded.'}</p></div></PublicShell>;
+    return <PublicShell owner={f.owner}><div className="confirm"><div className="confirm-icon"><Icon name="check" size={26} /></div><h1>{f.name}</h1><p style={{ whiteSpace: 'pre-wrap' }}>{result.message || 'Thanks! Your response has been recorded.'}</p></div></PublicShell>;
   }
   return (
     <PublicShell owner={f.owner}>

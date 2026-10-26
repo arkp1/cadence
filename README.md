@@ -4,7 +4,7 @@ Cadence is a full scheduling app: booking pages, team scheduling, Google Calenda
 
 People sign in with **Google** only; there are no passwords and no demo accounts.
 
-![Integrations](docs/screenshots/prod-07-integrations.png)
+![Event types](docs/screenshots/ui-event-types.png)
 
 ## Deploy to Vercel (production)
 
@@ -55,7 +55,31 @@ npm install
 npm run dev             # builds the client, serves on http://localhost:3000
 ```
 
-Add `http://localhost:3000/api/auth/google/callback` as a second redirect URI on your Google OAuth client. Any Postgres works locally, for example `docker run -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17`.
+On Windows use `Copy-Item .env.example .env` in PowerShell. Add
+`http://localhost:3000/api/auth/google/callback` as a second redirect URI on your Google OAuth
+client. Any Postgres works locally, for example
+`docker run -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:17`.
+
+### Preview the interface (no database needed)
+
+The client includes a browser-only preview mode. It answers every API call with realistic
+sample data, so you can look at the whole interface without Postgres, Google credentials or
+an internet connection:
+
+```bash
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000> and click **Preview the interface** (or go straight to
+<http://localhost:3000/app?demo=1>). Everything is clickable — create event types, edit
+availability, run the booking flow, vote in a poll. The header shows a **Demo** badge; click
+it to leave preview mode. Sample data lives only in the browser and resets on reload. The
+server still starts normally without configuration and shows the setup checklist under
+`/app`, so nothing about the real app changes.
+
+For UI work with hot reload, run `npm run dev:web` (Vite on <http://localhost:5173>) alongside
+`npm run dev`, or just use preview mode which needs no backend.
 
 ### Tests
 
@@ -83,6 +107,8 @@ node scripts/e2e/production.mjs        # Playwright: sign-in → onboarding → 
 - **Single-use links** that expire after one booking
 - **Paid meetings** with Stripe Checkout: the slot is held for 32 minutes while the invitee pays, then confirmed by webhook (or on return)
 - **Embeds**: inline, popup widget and popup text, via `<script src="/embed.js">`, with `postMessage` events (`cadence.event_scheduled`, page height)
+
+![Booking page](docs/screenshots/ui-booking.png)
 
 ### Event types (host side)
 - One-on-one, **group** (max invitees), **round robin** (strategy: optimise availability or equal distribution), **collective** (all hosts free)

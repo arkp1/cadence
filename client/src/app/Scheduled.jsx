@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
-import { api, download, fmtTime, fmtDate, absUrl, LOCATION_TYPES, locationLabel, durLabel, ts } from '../lib.js';
+import { api, download, fmtTime, fmtDate, absUrl, locationLabel, locationIcon, durLabel, ts } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, Tabs, Spinner, Empty, Badge, Confirm, Field, Toggle, CopyButton, useToast } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 export default function Scheduled() {
   const { me } = useAuth();
@@ -33,8 +34,8 @@ export default function Scheduled() {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Scheduled events</h1><p className="muted">Times shown in {tz.replace(/_/g, ' ')}</p></div>
-        <Button variant="secondary" onClick={() => download(`/bookings.csv?status=${status}`, `scheduled-events-${status}.csv`)}>⬇ Export CSV</Button>
+        <div><h1>Scheduled events</h1><p>Times shown in {tz.replace(/_/g, ' ')}</p></div>
+        <Button variant="secondary" onClick={() => download(`/bookings.csv?status=${status}`, `scheduled-events-${status}.csv`)}><Icon name="download" size={14} /> Export CSV</Button>
       </div>
       <div className="card">
         <div className="row between wrap gap pad-x">
@@ -62,7 +63,7 @@ export default function Scheduled() {
                       {b.status === 'rescheduled' && <Badge color="yellow">Rescheduled</Badge>}
                       {b.no_show && <Badge color="gray">No-show</Badge>}
                       {b.rescheduled_from && b.status === 'active' && <Badge color="blue">Rescheduled</Badge>}
-                      <span className="caret">{open === b.uid ? '▾' : '▸'}</span>
+                      <span className="caret"><Icon name={open === b.uid ? 'chevron-down' : 'chevron-right'} size={16} /></span>
                     </div>
                   </button>
                   {open === b.uid && (
@@ -71,20 +72,25 @@ export default function Scheduled() {
                         <div className="bk-detail-grid">
                           <div className="bk-actions">
                             {detail.status === 'active' && new Date(detail.start_utc) > new Date() && <>
-                              <CopyButton text={absUrl(`/reschedule/${detail.uid}`)} label="🔁 Copy reschedule link" />
-                              <Button size="sm" variant="danger-outline" onClick={() => { setReason(''); setCancel(detail); }}>✕ Cancel</Button>
+                              <CopyButton text={absUrl(`/reschedule/${detail.uid}`)} label="Copy reschedule link" />
+                              <Button size="sm" variant="danger-outline" onClick={() => { setReason(''); setCancel(detail); }}><Icon name="x" size={14} /> Cancel</Button>
                             </>}
                             {detail.status === 'active' && new Date(detail.start_utc) <= new Date() && (
                               <Toggle checked={detail.no_show} label="Mark as no-show" onChange={async (v) => { await api(`/bookings/${detail.uid}`, { method: 'PATCH', body: { no_show: v } }); setDetail({ ...detail, no_show: v }); load(); toast(v ? 'Marked as no-show' : 'No-show removed'); }} />
                             )}
-                            <a className="btn btn-ghost btn-sm" href={`/booking/${detail.uid}`} target="_blank" rel="noreferrer">Invitee view ↗</a>
+                            <a className="btn btn-ghost btn-sm" href={`/booking/${detail.uid}`} target="_blank" rel="noreferrer">Invitee view <Icon name="external" size={13} /></a>
                           </div>
                           <div className="kv">
                             <div><span>Email</span><a className="link" href={`mailto:${detail.invitee_email}`}>{detail.invitee_email}</a></div>
                             {detail.guests.length > 0 && <div><span>Guests</span>{detail.guests.join(', ')}</div>}
                             <div><span>When</span>{fmtDate(detail.start_utc, tz)} · {durLabel(detail.duration)}</div>
                             <div><span>Invitee time zone</span>{detail.invitee_tz} ({fmtTime(detail.start_utc, detail.invitee_tz || 'UTC', fmt)} their time)</div>
-                            {detail.location?.type && <div><span>Location</span>{LOCATION_TYPES[detail.location.type]?.icon} {locationLabel(detail.location)} {detail.location.value && (/^https?:/.test(detail.location.value) ? <a className="link" href={detail.location.value} target="_blank" rel="noreferrer">{detail.location.value}</a> : detail.location.value)}</div>}
+                            {detail.location?.type && (
+                              <div>
+                                <span>Location</span>
+                                <span className="row gap-sm"><Icon name={locationIcon(detail.location.type)} size={15} />{locationLabel(detail.location)} {detail.location.value && (/^https?:/.test(detail.location.value) ? <a className="link" href={detail.location.value} target="_blank" rel="noreferrer">{detail.location.value}</a> : detail.location.value)}</span>
+                              </div>
+                            )}
                             <div><span>Hosts</span>{detail.hosts.map((h) => h.name).join(', ')}</div>
                             {detail.answers.map((a) => <div key={a.id}><span>{a.label}</span>{Array.isArray(a.value) ? a.value.join(', ') : a.value}</div>)}
                             {detail.routing && <div><span>Routing form</span>{detail.routing.form}: {detail.routing.answers.map((a) => `${a.label}: ${a.value}`).join(' · ')}</div>}

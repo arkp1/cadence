@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, absUrl, durLabel, KIND_LABELS, LOCATION_TYPES } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, Field, Toggle, Spinner, useToast, Badge } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import ShareModal from './ShareModal.jsx';
 
 const COLORS = ['#4f46e5', '#0891b2', '#db2777', '#ea580c', '#16a34a', '#7c3aed', '#dc2626', '#ca8a04', '#0f172a'];
@@ -13,7 +14,7 @@ function Section({ title, subtitle, children, open: o = true }) {
   const [open, setOpen] = useState(o);
   return (
     <div className="card section">
-      <button className="section-head" onClick={() => setOpen(!open)}><div><h3>{title}</h3>{subtitle && <div className="small muted">{subtitle}</div>}</div><span className="caret">{open ? '▾' : '▸'}</span></button>
+      <button className="section-head" onClick={() => setOpen(!open)}><div><h3>{title}</h3>{subtitle && <div className="small muted">{subtitle}</div>}</div><span className="caret"><Icon name={open ? 'chevron-down' : 'chevron-right'} size={16} /></span></button>
       {open && <div className="section-body">{children}</div>}
     </div>
   );
@@ -57,13 +58,13 @@ export default function EventTypeEditor() {
     <div className="editor">
       <div className="page-head sticky-head">
         <div className="row gap">
-          <Link to="/app" className="icon-btn" aria-label="Back">←</Link>
+          <Link to="/app" className="icon-btn" aria-label="Back to event types"><Icon name="arrow-left" size={18} /></Link>
           <div><div className="small muted">{KIND_LABELS[et.kind]}</div><h1 className="ellipsis">{et.name}</h1></div>
         </div>
         <div className="row gap wrap">
-          <a className="btn btn-ghost" href={et.url_path} target="_blank" rel="noreferrer">Preview ↗</a>
-          <Link className="btn btn-ghost" to={`/app/event-types/${id}/troubleshoot`}>🔍 Troubleshoot</Link>
-          <Button variant="secondary" onClick={() => setShare(true)}>Share</Button>
+          <a className="btn btn-ghost" href={et.url_path} target="_blank" rel="noreferrer"><Icon name="external" size={14} /> Preview</a>
+          <Link className="btn btn-ghost" to={`/app/event-types/${id}/troubleshoot`}><Icon name="search" size={14} /> Troubleshoot</Link>
+          <Button variant="secondary" onClick={() => setShare(true)}><Icon name="link" size={14} /> Share</Button>
           <Button onClick={save} loading={saving} disabled={!dirty}>{dirty ? 'Save changes' : 'Saved'}</Button>
         </div>
       </div>
@@ -101,7 +102,7 @@ export default function EventTypeEditor() {
               if (!next.length) return; up({ durations: next, duration: next.includes(et.duration) ? et.duration : next[0] });
             }}>{durLabel(d)}</button>;
           })}
-          <input className="small-input" type="number" min="5" max="720" placeholder="Custom min" value={customDur} onChange={(e) => setCustomDur(e.target.value)} />
+          <input className="small-input" type="number" min="5" max="720" placeholder="Custom" aria-label="Custom duration in minutes" value={customDur} onChange={(e) => setCustomDur(e.target.value)} />
           <Button size="sm" variant="ghost" onClick={() => { const n = Number(customDur); if (n >= 5 && n <= 720) { up({ durations: [...new Set([...et.durations, n])].sort((a, b) => a - b) }); setCustomDur(''); } }}>Add</Button>
         </div>
         {et.durations.length > 1 && <Field label="Default duration" className="mt"><select value={et.duration} onChange={(e) => up({ duration: Number(e.target.value) })}>{et.durations.map((d) => <option key={d} value={d}>{durLabel(d)}</option>)}</select></Field>}
@@ -111,14 +112,14 @@ export default function EventTypeEditor() {
         {et.locations.map((l, i) => (
           <div key={i} className="loc-row">
             <select value={l.type} onChange={(e) => { const arr = [...et.locations]; arr[i] = { type: e.target.value, label: '', value: '' }; up({ locations: arr }); }}>
-              {Object.entries(LOCATION_TYPES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
+              {Object.entries(LOCATION_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
             {LOCATION_TYPES[l.type]?.needsValue && <input title={LOCATION_TYPES[l.type].placeholder} placeholder={LOCATION_TYPES[l.type].placeholder} value={l.value || ''} onChange={(e) => { const arr = [...et.locations]; arr[i] = { ...l, value: e.target.value }; up({ locations: arr }); }} />}
             <input placeholder="Display label (optional)" value={l.label || ''} onChange={(e) => { const arr = [...et.locations]; arr[i] = { ...l, label: e.target.value }; up({ locations: arr }); }} />
-            <button className="icon-btn" onClick={() => up({ locations: et.locations.filter((_, j) => j !== i) })} aria-label="Remove">✕</button>
+            <button className="icon-btn" onClick={() => up({ locations: et.locations.filter((_, j) => j !== i) })} aria-label="Remove location"><Icon name="x" size={14} /></button>
           </div>
         ))}
-        <Button size="sm" variant="outline" onClick={() => up({ locations: [...et.locations, { type: 'jitsi', label: '' }] })}>+ Add a location option</Button>
+        <Button size="sm" variant="outline" onClick={() => up({ locations: [...et.locations, { type: 'jitsi', label: '' }] })}><Icon name="plus" size={13} /> Add a location option</Button>
         <p className="small muted mt-sm">With more than one option, invitees choose the location when booking. Jitsi generates a unique video link for every meeting.</p>
       </Section>
 
@@ -199,7 +200,7 @@ export default function EventTypeEditor() {
               <div className="row gap-sm">
                 <button className="icon-btn" disabled={i === 0} onClick={() => { const a = [...et.questions]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; up({ questions: a }); }} aria-label="Up">↑</button>
                 <button className="icon-btn" disabled={i === et.questions.length - 1} onClick={() => { const a = [...et.questions]; [a[i + 1], a[i]] = [a[i], a[i + 1]]; up({ questions: a }); }} aria-label="Down">↓</button>
-                <button className="icon-btn" onClick={() => up({ questions: et.questions.filter((_, j) => j !== i) })} aria-label="Delete">✕</button>
+                <button className="icon-btn" onClick={() => up({ questions: et.questions.filter((_, j) => j !== i) })} aria-label="Delete question"><Icon name="x" size={14} /></button>
               </div>
             </div>
             {['radio', 'checkbox', 'select'].includes(q.type) && (
@@ -209,7 +210,7 @@ export default function EventTypeEditor() {
             )}
           </div>
         ))}
-        <Button size="sm" variant="outline" onClick={() => up({ questions: [...et.questions, { id: Math.random().toString(36).slice(2, 8), label: '', type: 'text', required: false, options: [] }] })}>+ Add new question</Button>
+        <Button size="sm" variant="outline" onClick={() => up({ questions: [...et.questions, { id: Math.random().toString(36).slice(2, 8), label: '', type: 'text', required: false, options: [] }] })}><Icon name="plus" size={13} /> Add new question</Button>
         <div className="row gap-lg wrap mt">
           <Toggle checked={st.allow_guests} onChange={(v) => ups({ allow_guests: v })} label="Allow invitees to add guests" />
           {st.allow_guests && <Field label="Max guests"><input className="small-input" type="number" min="1" max="50" value={st.max_guests} onChange={(e) => ups({ max_guests: Number(e.target.value) })} /></Field>}

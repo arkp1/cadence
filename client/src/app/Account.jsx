@@ -87,7 +87,7 @@ export function Settings() {
   const save = async () => { setBusy(true); try { await api('/me', { method: 'PATCH', body: f }); await refresh(); toast('Settings saved'); } catch (e) { toast(e.message, 'err'); } setBusy(false); };
   return (
     <div>
-      <div className="page-head"><div><h1>Settings</h1></div><Button onClick={save} loading={busy}>Save changes</Button></div>
+      <div className="page-head"><div><h1>Settings</h1><p>Profile, locale, branding and active sessions.</p></div><Button onClick={save} loading={busy}>Save changes</Button></div>
       <div className="card pad stack">
         <h3>Profile</h3>
         <div className="row gap"><Avatar name={f.name} color={f.avatar_color} src={u.avatar_url} size={56} />

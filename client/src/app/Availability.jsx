@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { api } from '../lib.js';
 import { Button, Field, Spinner, TimezoneSelect, Toggle, useToast, Modal, Confirm, Badge, Empty } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 
 const DAYS = [['sun', 'Sunday'], ['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday']];
 const TIMES = (() => { const a = []; for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += 15) a.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`); a.push('24:00'); return a; })();
@@ -17,7 +18,7 @@ function Intervals({ list, onChange }) {
           <TimeSel value={iv.start} onChange={(v) => { const a = [...list]; a[i] = { ...iv, start: v }; onChange(a); }} />
           <span>–</span>
           <TimeSel value={iv.end} onChange={(v) => { const a = [...list]; a[i] = { ...iv, end: v }; onChange(a); }} />
-          <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label="Remove">✕</button>
+          <button className="icon-btn" onClick={() => onChange(list.filter((_, j) => j !== i))} aria-label="Remove interval"><Icon name="x" size={14} /></button>
           {iv.start >= iv.end && <span className="field-error">End must be after start</span>}
         </div>
       ))}
@@ -58,8 +59,8 @@ export default function Availability() {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Availability</h1><p className="muted">Set when you are available for meetings.</p></div>
-        <Button variant="secondary" onClick={async () => { const r = await api('/schedules', { method: 'POST', body: { name: 'New schedule', timezone: draft.timezone } }); await load(r.schedule.id); toast('Schedule created'); }}>+ New schedule</Button>
+        <div><h1>Availability</h1><p>Set when you are available for meetings.</p></div>
+        <Button variant="secondary" onClick={async () => { const r = await api('/schedules', { method: 'POST', body: { name: 'New schedule', timezone: draft.timezone } }); await load(r.schedule.id); toast('Schedule created'); }}><Icon name="plus" size={14} /> New schedule</Button>
       </div>
       <div className="sched-tabs">
         {data.schedules.map((s) => (
@@ -93,8 +94,8 @@ export default function Availability() {
                       {list.length ? <Intervals list={list} onChange={(l) => setDay(d, l)} /> : <span className="muted">Unavailable</span>}
                     </div>
                     <div className="week-acts">
-                      <button className="icon-btn" title="Add interval" onClick={() => { const last = list[list.length - 1]; setDay(d, [...list, last ? { start: last.end < '23:00' ? last.end : '17:00', end: last.end < '23:00' ? `${String(Math.min(24, Number(last.end.slice(0, 2)) + 1)).padStart(2, '0')}:${last.end.slice(3)}` : '18:00' } : { start: '09:00', end: '17:00' }]); }}>＋</button>
-                      <button className="icon-btn" title="Copy to all days" onClick={() => { const r = {}; for (const [k] of DAYS) r[k] = structuredClone(list); upd({ rules: r }); toast(`Copied ${name} hours to all days`); }}>⧉</button>
+                      <button className="icon-btn" title="Add interval" onClick={() => { const last = list[list.length - 1]; setDay(d, [...list, last ? { start: last.end < '23:00' ? last.end : '17:00', end: last.end < '23:00' ? `${String(Math.min(24, Number(last.end.slice(0, 2)) + 1)).padStart(2, '0')}:${last.end.slice(3)}` : '18:00' } : { start: '09:00', end: '17:00' }]); }} aria-label="Add interval"><Icon name="plus" size={15} /></button>
+                      <button className="icon-btn" title="Copy to all days" onClick={() => { const r = {}; for (const [k] of DAYS) r[k] = structuredClone(list); upd({ rules: r }); toast(`Copied ${name} hours to all days`); }} aria-label="Copy to all days"><Icon name="duplicate" size={14} /></button>
                     </div>
                   </div>
                 );
@@ -104,14 +105,14 @@ export default function Availability() {
           <div>
             <h3>Date-specific hours</h3>
             <p className="small muted">Override your availability for specific dates when your hours differ from your regular weekly hours.</p>
-            <Button variant="outline" size="sm" onClick={() => setOvModal({ date: today, unavailable: false, intervals: [{ start: '09:00', end: '17:00' }] })}>+ Add date-specific hours</Button>
+            <Button variant="outline" size="sm" onClick={() => setOvModal({ date: today, unavailable: false, intervals: [{ start: '09:00', end: '17:00' }] })}><Icon name="plus" size={13} /> Add date-specific hours</Button>
             <div className="ov-list">
               {overrides.map(([date, ints]) => (
                 <div key={date} className={`ov-row ${date < today ? 'past' : ''}`}>
                   <div><div className="strong">{DateTime.fromISO(date).toFormat('ccc, LLL d, yyyy')}</div><div className="small muted">{ints.length ? ints.map((i) => `${label(i.start)} – ${label(i.end)}`).join(', ') : 'Unavailable'}</div></div>
                   <div className="row gap-sm">
-                    <button className="icon-btn" onClick={() => setOvModal({ date, unavailable: !ints.length, intervals: ints.length ? ints : [{ start: '09:00', end: '17:00' }], editing: true })}>✏️</button>
-                    <button className="icon-btn" onClick={() => { const o = { ...draft.overrides }; delete o[date]; upd({ overrides: o }); }}>✕</button>
+                    <button className="icon-btn" onClick={() => setOvModal({ date, unavailable: !ints.length, intervals: ints.length ? ints : [{ start: '09:00', end: '17:00' }], editing: true })} aria-label="Edit override"><Icon name="pencil" size={14} /></button>
+                    <button className="icon-btn" onClick={() => { const o = { ...draft.overrides }; delete o[date]; upd({ overrides: o }); }} aria-label="Remove override"><Icon name="x" size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -123,12 +124,12 @@ export default function Availability() {
 
       <div className="card pad mt">
         <div className="row between wrap"><div><h3>Time off</h3><p className="small muted">Block whole days across all your schedules (vacations, holidays, conferences).</p></div>
-          <Button variant="outline" size="sm" onClick={() => { setOff({ start_date: today, end_date: today, label: 'Vacation' }); setOffModal(true); }}>+ Add time off</Button></div>
+          <Button variant="outline" size="sm" onClick={() => { setOff({ start_date: today, end_date: today, label: 'Vacation' }); setOffModal(true); }}><Icon name="plus" size={13} /> Add time off</Button></div>
         {!data.time_off.length ? <Empty icon="🏖️" title="No time off scheduled" /> : (
           <div className="ov-list">{data.time_off.map((t) => (
             <div key={t.id} className={`ov-row ${t.end_date < today ? 'past' : ''}`}>
               <div><div className="strong">{t.label}</div><div className="small muted">{DateTime.fromISO(t.start_date).toFormat('LLL d, yyyy')}{t.end_date !== t.start_date ? ` → ${DateTime.fromISO(t.end_date).toFormat('LLL d, yyyy')}` : ''}</div></div>
-              <button className="icon-btn" onClick={async () => { await api(`/time-off/${t.id}`, { method: 'DELETE' }); load(sel); }}>✕</button>
+              <button className="icon-btn" onClick={async () => { await api(`/time-off/${t.id}`, { method: 'DELETE' }); load(sel); }} aria-label="Remove time off"><Icon name="x" size={14} /></button>
             </div>
           ))}</div>
         )}
@@ -143,7 +144,7 @@ export default function Availability() {
           <Field label="Date"><input type="date" value={ovModal.date} min={today} onChange={(e) => setOvModal({ ...ovModal, date: e.target.value })} disabled={ovModal.editing} /></Field>
           <Toggle checked={ovModal.unavailable} onChange={(v) => setOvModal({ ...ovModal, unavailable: v })} label="Mark unavailable (all day)" />
           {!ovModal.unavailable && <><div className="small strong">What hours are you available?</div><Intervals list={ovModal.intervals} onChange={(l) => setOvModal({ ...ovModal, intervals: l })} />
-            <Button size="sm" variant="ghost" onClick={() => setOvModal({ ...ovModal, intervals: [...ovModal.intervals, { start: '18:00', end: '19:00' }] })}>+ Add interval</Button></>}
+            <Button size="sm" variant="ghost" onClick={() => setOvModal({ ...ovModal, intervals: [...ovModal.intervals, { start: '18:00', end: '19:00' }] })}><Icon name="plus" size={13} /> Add interval</Button></>}
           <p className="small muted">Remember to click Save on the schedule after applying.</p>
         </div>}
       </Modal>
