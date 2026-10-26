@@ -67,7 +67,7 @@ const state = {
   user: {
     id: 1, name: 'Ada Lovelace', email: 'ada@lovelace.dev', slug: 'ada',
     timezone: 'Asia/Calcutta', time_format: '12h',
-    avatar_url: null, avatar_color: '#4f46e5', brand_color: '#4f46e5',
+    avatar_url: null, avatar_color: '#5b57d1', brand_color: '#5b57d1',
     welcome: 'Pick a time below and let’s find a moment to talk. I usually reply within a day.',
     phone: '+91 98765 43210', max_meetings_per_day: null,
     default_schedule_id: 1, onboarded: true, role: 'owner',

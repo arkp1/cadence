@@ -1,6 +1,6 @@
 # Cadence — an open scheduling platform (Calendly alternative)
 
-Cadence is a full scheduling app: booking pages, team scheduling, Google Calendar and Outlook sync, Meet/Teams links, paid meetings, workflows, polls, routing forms, webhooks and an API. It runs on **Node.js + Postgres (Neon)** and deploys to **Vercel** as one serverless function plus static assets.
+Cadence is a full scheduling app: booking pages, team scheduling, Google Calendar and Outlook sync, Meet/Teams links, paid meetings, workflows, polls, routing forms, webhooks and an API. It runs on **Node.js + Postgres (Neon)** and deploys to **Vercel** as one serverless function plus static assets. The interface is **React 18 + Tailwind CSS v4 + shadcn/ui**, with a warm editorial theme and a ⌘K command palette.
 
 People sign in with **Google** only; there are no passwords and no demo accounts.
 
@@ -96,6 +96,15 @@ node scripts/e2e/production.mjs        # Playwright: sign-in → onboarding → 
 
 ## Features
 
+### Interface
+- Built with **shadcn/ui** components on Radix primitives — accessible dialogs, dropdown menus, tabs, switches, a command palette and a mobile navigation sheet — plus custom Tailwind CSS v4 tokens.
+- A warm, editorial visual system: Geist for the product UI, Instrument Serif for display moments, a dark workspace sidebar and soft, layered surfaces.
+- Press **⌘K** / **Ctrl K** anywhere in the dashboard to jump between pages, copy your booking link or open the preview.
+- Fully responsive from 320px up; public booking, polls and routing forms share the same design language.
+- A browser-only preview mode renders the whole interface with sample data, with no database required (see [Local development](#local-development)).
+
+![Command palette](docs/screenshots/ui-command.png)
+
 ### Booking experience (invitee side)
 - Profile page listing public event types; secret event types are reachable only by link
 - Month calendar → time list → details form, with time zone search/auto-detect and 12h/24h toggle
@@ -159,7 +168,7 @@ server/              Express 5 + pg + luxon
   slots.js           availability engine             bookings.js  create/cancel/reschedule (locked tx)
   payments.js        Stripe Checkout + webhook       notify.js    email, ICS, workflows, webhooks
   public.js          invitee API                     api.js       host API (cookie or Bearer token)
-client/src/          React 18 + React Router (Vite)
+client/src/          React 18 + React Router + Tailwind CSS v4 + shadcn/ui (Vite)
 scripts/vercel-build.mjs   Build Output API bundle (static + one function + cron)
 scripts/test/        API, integration and upstream-mock test suites
 ```

@@ -9,8 +9,22 @@ const WEEK = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export function PublicShell({ owner, children, wide }) {
   const embed = isEmbed();
+  const brand = owner?.brand_color || '#5b57d1';
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = { brand: root.style.getPropertyValue('--brand'), primary: root.style.getPropertyValue('--primary'), ring: root.style.getPropertyValue('--ring') };
+    root.style.setProperty('--brand', brand);
+    root.style.setProperty('--primary', brand);
+    root.style.setProperty('--ring', brand);
+    return () => {
+      Object.entries(previous).forEach(([key, value]) => {
+        if (value) root.style.setProperty(`--${key}`, value);
+        else root.style.removeProperty(`--${key}`);
+      });
+    };
+  }, [brand]);
   return (
-    <div className={`public-shell ${embed ? 'embed' : ''}`} style={{ '--brand': owner?.brand_color || '#4f46e5' }}>
+    <div className={`public-shell ${embed ? 'embed' : ''}`} style={{ '--brand': brand, '--primary': brand, '--ring': brand }}>
       <div className={`public-card ${wide ? 'wide' : ''}`}>
         {!owner?.hide_branding && !embed && <a className="powered" href="/" target="_blank" rel="noreferrer">powered by <b>Cadence</b></a>}
         {children}
@@ -293,7 +307,7 @@ function BookingForm({ event, slot, duration, tz, linkToken, reschedule, routing
       )}
       <p className="small muted">By proceeding, you confirm that you have read and agree to the host's terms and privacy notice.</p>
       {err && <div className="alert alert-error">{err}</div>}
-      <Button type="submit" loading={busy} className="btn-pill">{reschedule ? 'Reschedule Event' : st.price_cents > 0 ? 'Continue to payment' : 'Schedule Event'}</Button>
+      <Button type="submit" loading={busy} className="h-11 self-start rounded-full px-6">{reschedule ? 'Reschedule Event' : st.price_cents > 0 ? 'Continue to payment' : 'Schedule Event'}</Button>
     </form>
   );
 }

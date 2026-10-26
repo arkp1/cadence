@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Plus, MoreHorizontal, Pencil, Search, Copy, Trash2, ArrowUp, ArrowDown, Link2 } from 'lucide-react';
 import { api, absUrl, durLabel, KIND_LABELS, KIND_DESCRIPTIONS } from '../lib.js';
 import { useAuth } from '../auth.js';
 import { Button, CopyButton, Toggle, Modal, Spinner, useAsync, useToast, Avatar, Confirm, Badge } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ShareModal from './ShareModal.jsx';
 
 export default function EventTypes() {
@@ -14,7 +16,6 @@ export default function EventTypes() {
   const [creating, setCreating] = useState(false);
   const [share, setShare] = useState(null);
   const [del, setDel] = useState(null);
-  const [menu, setMenu] = useState(null);
   const [q, setQ] = useState('');
   if (loading) return <Spinner center />;
   const list = data.event_types.filter((e) => !q || e.name.toLowerCase().includes(q.toLowerCase()));
@@ -35,10 +36,10 @@ export default function EventTypes() {
   };
 
   return (
-    <div onClick={() => setMenu(null)}>
+    <div>
       <div className="page-head">
         <div><h1>Event types</h1><p>Create events to share for people to book on your calendar.</p></div>
-        <Button onClick={() => setCreating(true)}><Icon name="plus" size={15} /> New event type</Button>
+        <Button onClick={() => setCreating(true)}><Plus className="size-4" /> New event type</Button>
       </div>
       <div className="row between wrap gap mb">
         <div className="row gap">
@@ -48,27 +49,31 @@ export default function EventTypes() {
             <a className="link xsmall" href={`/${me.user.slug}`} target="_blank" rel="noreferrer">{absUrl(`/${me.user.slug}`)}</a>
           </div>
         </div>
-        <input className="search" placeholder="Search event types…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search event types" />
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input className="search pl-9" placeholder="Search event types…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search event types" />
+        </div>
       </div>
       <div className="et-grid">
         {list.map((et, idx) => (
           <div key={et.id} className={`et-card ${et.active ? '' : 'off'}`} style={{ '--c': et.color }}>
             <div className="et-top">
               <Toggle checked={et.active} onChange={(v) => toggle(et, v)} />
-              <div className="et-menu-wrap">
-                <button className="icon-btn" onClick={(e) => { e.stopPropagation(); setMenu(menu === et.id ? null : et.id); }} aria-label="More actions" aria-haspopup="menu"><Icon name="more" size={17} /></button>
-                {menu === et.id && (
-                  <div className="menu" role="menu" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => nav(`/app/event-types/${et.id}`)}><Icon name="pencil" size={15} /> Edit</button>
-                    <button onClick={() => { setShare(et); setMenu(null); }}><Icon name="link" size={15} /> Share / embed</button>
-                    <button onClick={() => nav(`/app/event-types/${et.id}/troubleshoot`)}><Icon name="search" size={15} /> Troubleshoot availability</button>
-                    <button onClick={async () => { await api(`/event-types/${et.id}/duplicate`, { method: 'POST' }); reload(); toast('Duplicated'); setMenu(null); }}><Icon name="duplicate" size={15} /> Duplicate</button>
-                    <button onClick={() => { move(idx, -1); setMenu(null); }} disabled={idx === 0}><Icon name="arrow-up" size={15} /> Move up</button>
-                    <button onClick={() => { move(idx, 1); setMenu(null); }} disabled={idx === list.length - 1}><Icon name="arrow-down" size={15} /> Move down</button>
-                    <button className="danger" onClick={() => { setDel(et); setMenu(null); }}><Icon name="trash" size={15} /> Delete</button>
-                  </div>
-                )}
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="icon-btn" aria-label="More actions"><MoreHorizontal className="size-[17px]" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onSelect={() => nav(`/app/event-types/${et.id}`)}><Pencil /> Edit</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setShare(et)}><Link2 /> Share / embed</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => nav(`/app/event-types/${et.id}/troubleshoot`)}><Search /> Troubleshoot availability</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={async () => { await api(`/event-types/${et.id}/duplicate`, { method: 'POST' }); reload(); toast('Duplicated'); }}><Copy /> Duplicate</DropdownMenuItem>
+                  <DropdownMenuItem disabled={idx === 0} onSelect={() => move(idx, -1)}><ArrowUp /> Move up</DropdownMenuItem>
+                  <DropdownMenuItem disabled={idx === list.length - 1} onSelect={() => move(idx, 1)}><ArrowDown /> Move down</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onSelect={() => setDel(et)}><Trash2 /> Delete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <Link to={`/app/event-types/${et.id}`} className="et-body">
               <h3>{et.name}</h3>

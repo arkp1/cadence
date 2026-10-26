@@ -179,7 +179,7 @@ export function BookingPage({ cancelMode }) {
             <div className="cancel-box">
               <Field label="Reason for canceling"><textarea rows={4} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Let the host know why you are canceling (optional)" /></Field>
               {err && <div className="alert alert-error">{err}</div>}
-              <Button variant="danger" className="btn-pill" loading={busy} onClick={async () => {
+              <Button variant="danger" className="h-11 rounded-full px-6" loading={busy} onClick={async () => {
                 setBusy(true); setErr('');
                 try { const r = await api(`/api/public/bookings/${uid}/cancel`, { method: 'POST', body: { reason } }); setData({ booking: r.booking }); } catch (e) { setErr(e.message); setBusy(false); }
               }}>Cancel Event</Button>
@@ -309,7 +309,7 @@ export function RoutingFormPage() {
           </Field>
         ))}
         {err && <div className="alert alert-error">{err}</div>}
-        <Button type="submit" loading={busy} className="btn-pill">Submit</Button>
+        <Button type="submit" loading={busy} className="h-11 rounded-full">Submit</Button>
       </form>
     </PublicShell>
   );
